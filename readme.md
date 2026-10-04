@@ -125,6 +125,85 @@ If it asks for a password, use a **Personal Access Token** (not your GitHub pass
 
 ✅ Done! Now wait for the owner to review.
 
+## Backend configuration and deployment
+
+The application uses MySQL for accounts, service catalog, orders, order files, and
+payment-review records; MongoDB for message threads, audit events, and rate limits;
+Google OAuth for customer sign-in; and a private Backblaze B2 bucket for uploaded
+artwork. GCash references and walk-in cash entries are **manual payments**: the
+application records them as pending until an authorized staff member reviews them.
+It does not charge a payment provider.
+
+### Local setup
+
+1. Copy `.env.example` to `.env` and replace the placeholder credentials. Keep `.env`
+   out of source control. `JWT_SECRET` must contain at least 32 random bytes.
+2. Create the MySQL database and import `database.sql` into it. The SQL file creates
+   missing tables and seeds the service catalog; it does not alter an existing
+   schema. Back up and apply reviewed migrations before changing an existing database.
+3. Create a least-privilege MySQL application user with access only to this database
+   and the `SELECT`, `INSERT`, `UPDATE`, and `DELETE` privileges used by the app.
+   Use TLS and a non-empty password outside local development.
+4. Create a MongoDB database user and URI-encode special characters in its password.
+   Allow the deployment host in the Atlas network access list. The app creates its
+   message, audit, and rate-limit indexes on first connection; the MongoDB user must
+   be permitted to create indexes in those collections.
+5. Create a Google OAuth web client. Add
+   `http://localhost:3000/api/auth/google/callback` as an authorized redirect URI
+   locally. OAuth is configured using `GOOGLE_CLIENT_ID` and
+   `GOOGLE_CLIENT_SECRET`.
+6. Create a **private** Backblaze B2 bucket and an application key scoped to that
+   bucket with file read and write permissions. Set `B2_REGION`, `B2_KEY_ID`,
+   `B2_APPLICATION_KEY`, and `B2_BUCKET_NAME` from the bucket and key details.
+   Configure bucket CORS to allow `PUT` from the local app origin and production app
+   origin, with the `Content-Type` and `x-amz-meta-order-number` request headers. Do
+   not expose the bucket publicly; the app issues short-lived signed upload and
+   download URLs.
+7. Register the first account through the app, then provision it as the first lead
+   administrator using an administrative database connection:
+
+   ```sql
+   START TRANSACTION;
+   UPDATE tbl_user SET role = 'lead_admin' WHERE email = 'admin@example.com';
+   INSERT INTO tbl_staff_profile (user_id, staff_code, work_status)
+   SELECT UID, 'ADMIN001', 'off_duty'
+   FROM tbl_user WHERE email = 'admin@example.com';
+   COMMIT;
+   ```
+
+   Replace both example values with the registered account's email and a unique
+   staff code. Afterwards, create staff accounts in the protected Staff Management
+   screen. Customers, staff, and administrators all use the same email-and-password
+   login form; staff codes remain roster identifiers and are not used to sign in.
+
+### Render deployment
+
+Set the Render build command to `npm run build` and start command to `npm run start`.
+Configure the same MySQL, MongoDB, Google OAuth, and B2 variables from `.env.example`
+as Render environment secrets. Set `APP_URL` to the final HTTPS origin and register
+`https://your-domain/api/auth/google/callback` as a Google OAuth redirect URI. Set
+`MYSQL_SSL=true` and `MONGODB_TLS=true`; production startup rejects disabled TLS,
+and the session cookie is Secure in production. Use managed database endpoints
+reachable from Render and allow Render's outbound IPs in database access controls.
+
+Never prefix database, OAuth client-secret, JWT, or B2 credentials with
+`NEXT_PUBLIC_`; those values must remain server-only.
+
+### Railway deployment
+
+The app uses a custom Node.js entry point (`server.mjs`) to serve both Next.js and
+the authenticated WebSocket endpoint at `/realtime` on the same Railway-assigned
+`PORT`. Set the Railway build command to `npm run build` and the start command to
+`npm start`. Configure the environment variables above, including `APP_URL` as the
+public HTTPS origin, and use one running replica while realtime events are held in
+process memory. Running multiple replicas requires adding a shared event broker
+before scaling; otherwise a client connected to one replica will not receive events
+published by another.
+
+The development command (`npm run dev`) also launches this combined server. Do not
+replace the start command with `next start`, because that would omit the WebSocket
+endpoint.
+
 ---
 
 ## Step 9 — If the owner asks for changes

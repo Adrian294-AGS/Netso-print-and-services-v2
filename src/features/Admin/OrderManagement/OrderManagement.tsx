@@ -207,14 +207,14 @@ export function OrderManagement({
                     value={req.status}
                     onChange={(e) => {
                       const newSt = e.target.value as OrderStatus;
-                      const stMap: Record<OrderStatus, number> = {
+                      const stMap: Partial<Record<OrderStatus, number>> = {
                         'Unpaid Balance': 1,
                         'In Pre-Press': 2,
                         'In Production': 3,
                         'Ready for Pickup': 4,
                         Completed: 4,
                       };
-                      onUpdateOrderStatus(req.id, newSt, stMap[newSt]);
+                      onUpdateOrderStatus(req.id, newSt, stMap[newSt] ?? req.progressStage);
                     }}
                     className="border border-zinc-300 dark:border-zinc-700 bg-amber-50/70 dark:bg-zinc-800 text-zinc-900 dark:text-white font-extrabold text-xs rounded-lg px-2 py-1 focus:outline-none focus:border-[#D4A017] cursor-pointer"
                   >
@@ -223,6 +223,7 @@ export function OrderManagement({
                     <option value="In Production">● In Production</option>
                     <option value="Ready for Pickup">✓ Ready for Pickup</option>
                     <option value="Completed">✓ Completed</option>
+                    <option value="Cancelled">× Cancelled</option>
                   </select>
                 </td>
                 <td className="py-3 px-3.5 text-right">

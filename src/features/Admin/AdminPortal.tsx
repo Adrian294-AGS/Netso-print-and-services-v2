@@ -11,8 +11,6 @@ import {
   UserCheck,
   User,
   LogOut,
-  Lock,
-  Loader2,
   X,
   Printer,
   Layers,
@@ -28,7 +26,7 @@ import {
   FontSizeLevel,
   StaffMember,
 } from '../../types';
-import { INITIAL_STAFF } from '../../data/requests';
+import type { AuthenticatedUser } from '../Authentication/Authentication';
 import { Header } from '../../components/Header';
 import { Sidebar } from '../../components/Sidebar';
 import {
@@ -61,11 +59,14 @@ export type AdminTabId =
   | 'profile';
 
 interface AdminPortalProps {
+  currentUser: AuthenticatedUser;
   requests: RequestOrder[];
   customers: CustomerRecord[];
   payments: PaymentTransaction[];
   threads: MessageThread[];
   userLogs: UserLogEntry[];
+  notifications: Array<{ id: string; time: string; text: string; unread: boolean }>;
+  setNotifications: React.Dispatch<React.SetStateAction<Array<{ id: string; time: string; text: string; unread: boolean }>>>;
   onUpdateOrderStatus: (
     orderId: string,
     newStatus: OrderStatus,
@@ -88,17 +89,19 @@ interface AdminPortalProps {
   setFontSizeLevel: (level: FontSizeLevel) => void;
   highContrastMode: boolean;
   setHighContrastMode: (val: boolean) => void;
-  onSwitchToCustomerPortal: () => void;
   onLogout?: () => void;
   initialTab?: AdminTabId;
 }
 
 export function AdminPortal({
+  currentUser,
   requests,
   customers,
   payments,
   threads,
   userLogs,
+  notifications,
+  setNotifications,
   onUpdateOrderStatus,
   onVerifyPayment,
   onRecordPayment,
@@ -110,56 +113,58 @@ export function AdminPortal({
   onLogout,
   initialTab = 'dashboard',
 }: AdminPortalProps) {
-  const [activeTab, setActiveTab] = useState<AdminTabId>(initialTab);
+  const isLeadAdmin = currentUser.staffRole === 'lead_admin';
+  const canReviewPayments =
+    isLeadAdmin || currentUser.staffRole === 'front_desk_cashier';
+  const canAccessTab = (tab: string) => {
+    if (['customers', 'staff', 'services', 'reports', 'logs'].includes(tab)) return isLeadAdmin;
+    if (tab === 'payments') return canReviewPayments;
+    return true;
+  };
+  const [activeTab, setActiveTab] = useState<AdminTabId>(() =>
+    canAccessTab(initialTab) ? initialTab : 'dashboard'
+  );
   const [orderStatusFilter, setOrderStatusFilter] = useState<string>('All');
-  const [activeOperator, setActiveOperator] = useState<StaffMember>(INITIAL_STAFF[0]);
-  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(true);
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [adminUsername, setAdminUsername] = useState('admin_netso@netsoprints.com');
-  const [adminPassword, setAdminPassword] = useState('••••••••••');
+  const [activeOperator] = useState<StaffMember>(() => {
+    const roleLabels: Record<string, StaffMember['role']> = {
+      lead_admin: 'Lead Admin',
+      print_operator: 'Print Operator',
+      pre_press_artist: 'Pre-Press Artist',
+      front_desk_cashier: 'Front Desk & Cashier',
+    };
+    return {
+      id: currentUser.username?.toUpperCase() || currentUser.id || '',
+      name: currentUser.name,
+      username: currentUser.username || currentUser.identifier,
+      role: roleLabels[currentUser.staffRole || ''] || 'Print Operator',
+      email: currentUser.identifier,
+      phone: '',
+      shift: 'Not scheduled',
+      status: 'Off Duty',
+      assignedJobs: 0,
+      completedToday: 0,
+    };
+  });
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
 
   const [selectedOrderForDetails, setSelectedOrderForDetails] = useState<RequestOrder | null>(null);
   const [selectedCustomerForModal, setSelectedCustomerForModal] = useState<CustomerRecord | null>(
     null
   );
-  const [selectedThreadId, setSelectedThreadId] = useState<string>(threads[0]?.id || 'THR-101');
+  const [selectedThreadId, setSelectedThreadId] = useState('');
+  const activeThreadId = threads.some((thread) => thread.id === selectedThreadId)
+    ? selectedThreadId
+    : threads[0]?.id || '';
 
   const [isWalkInModalOpen, setIsWalkInModalOpen] = useState(false);
   const [walkInName, setWalkInName] = useState('');
-  const [walkInPhone, setWalkInPhone] = useState('0917-');
-  const [walkInService, setWalkInService] = useState('Tarpaulin Banner (3x5 ft)');
-  const [walkInAmount, setWalkInAmount] = useState(280);
-  const [walkInPaid, setWalkInPaid] = useState(280);
-  const [walkInNotes, setWalkInNotes] = useState('Walk-in customer order · Eyelets all corners');
+  const [walkInPhone, setWalkInPhone] = useState('');
+  const [walkInService, setWalkInService] = useState('');
+  const [walkInAmount, setWalkInAmount] = useState(0);
+  const [walkInPaid, setWalkInPaid] = useState(0);
+  const [walkInNotes, setWalkInNotes] = useState('');
 
   const [isNotifOpen, setIsNotifOpen] = useState(false);
-  const [notifications, setNotifications] = useState([
-    {
-      id: 'n1',
-      time: 'Today · 10:22 AM',
-      text: '💬 Alexandrie Abon sent a message on NETSO-90103.',
-      unread: true,
-    },
-    {
-      id: 'n2',
-      time: 'Today · 09:40 AM',
-      text: '📋 New Rush ID service request NETSO-00126 submitted by Maria Santos.',
-      unread: true,
-    },
-    {
-      id: 'n3',
-      time: 'Today · 08:45 AM',
-      text: '💳 Carlo Mendoza submitted GCash Ref #GC-8841-2209-67 (₱500).',
-      unread: true,
-    },
-    {
-      id: 'n4',
-      time: 'Yesterday · 04:15 PM',
-      text: '📦 NETSO-00127 marked Ready for Pickup for John Cruz.',
-      unread: false,
-    },
-  ]);
 
   const stats = useMemo(() => {
     const pending = requests.filter(
@@ -170,22 +175,22 @@ export function AdminPortal({
     const completed = requests.filter((r) => r.status === 'Completed').length;
     const unpaid = requests.filter((r) => r.unpaidAmount > 0).length;
     const unreadMsgs = threads.filter((t) => t.status === 'UNREAD').length;
-    const unverifiedPayments = requests.filter(
-      (r) => !r.paymentVerified && r.paidAmount > 0
+    const unverifiedPayments = payments.filter(
+      (payment) => payment.status === 'Pending Review'
     ).length;
     const totalUnpaidAmount = requests.reduce((sum, r) => sum + r.unpaidAmount, 0);
     return {
-      totalRequests: 118 + requests.length,
-      pending: 15 + pending,
-      processing: 10 + processing,
-      ready: 7 + ready,
-      completed: 86 + completed,
+      totalRequests: requests.length,
+      pending,
+      processing,
+      ready,
+      completed,
       unpaid,
       unreadMsgs,
       unverifiedPayments,
       totalUnpaidAmount,
     };
-  }, [requests, threads]);
+  }, [requests, threads, payments]);
 
   const activeModalOrder = useMemo(() => {
     if (!selectedOrderForDetails) return null;
@@ -197,28 +202,6 @@ export function AdminPortal({
   const handleNavigateTab = (tab: AdminTabId, filter?: string) => {
     if (filter) setOrderStatusFilter(filter);
     setActiveTab(tab);
-  };
-
-  const handleAdminLogin = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    setIsLoggingIn(true);
-    setTimeout(() => {
-      setIsAdminLoggedIn(true);
-      setIsLoggingIn(false);
-      setActiveTab('dashboard');
-      onAddUserLog({
-        actorName: `${activeOperator.name} (${activeOperator.role})`,
-        actorUsername: activeOperator.username,
-        actorRole: activeOperator.role === 'Lead Admin' ? 'Admin' : 'Operator',
-        category: 'Authentication',
-        action: 'Admin Portal Sign-In',
-        details: `Operator (${adminUsername}) authenticated into NETSO Service Management Portal.`,
-        targetId: 'SESSION-ADM',
-        ipAddress: '112.198.44.102',
-        device: 'Admin Service Desk · Santiago City',
-        status: 'Verified',
-      });
-    }, 450);
   };
 
   const handleAdminLogout = () => {
@@ -235,11 +218,7 @@ export function AdminPortal({
       status: 'Success',
     });
     setIsLogoutModalOpen(false);
-    if (onLogout) {
-      onLogout();
-    } else {
-      setIsAdminLoggedIn(false);
-    }
+    onLogout?.();
   };
 
   const handleWalkInSubmit = (e: React.FormEvent) => {
@@ -263,95 +242,18 @@ export function AdminPortal({
     .join('')
     .slice(0, 2);
 
-  if (!isAdminLoggedIn) {
-    return (
-      <div
-        className={`min-h-screen flex flex-col selection:bg-[#D4A017] selection:text-black overflow-y-auto font-clarity-modern ${
-          highContrastMode ? 'bg-black text-white' : 'bg-[#0D0D0E] text-[#F4F4F5]'
-        }`}
-      >
-        <div className="flex-1 flex items-center justify-center p-4 sm:p-6">
-          <div className="w-full max-w-md p-6 sm:p-8 rounded-2xl border border-zinc-800 bg-[#121214] text-zinc-100 shadow-2xl">
-            <div className="text-center mb-6">
-              <img
-                src="/logo/netso-logo.jpg"
-                alt="NETSO Prints Logo"
-                className="w-16 h-16 rounded-2xl object-contain mx-auto mb-3 border border-zinc-700 shadow-md"
-              />
-              <div className="flex items-center justify-center gap-2 mb-1.5">
-                <span className="font-black text-2xl tracking-tight text-white">NETSO PRINTS</span>
-                <span className="bg-[#D4A017] text-black font-black text-xs px-2 py-0.5 rounded uppercase tracking-wider">
-                  ADMIN PORTAL
-                </span>
-              </div>
-              <p className="text-sm text-zinc-300 font-medium">
-                Service Request Management, GCash Ledger &amp; Operator Audit Sign In
-              </p>
-            </div>
-
-            <form onSubmit={handleAdminLogin} className="space-y-4">
-              <div>
-                <label className="block text-sm font-extrabold uppercase tracking-wide text-zinc-200 mb-1.5">
-                  Admin Email or Operator Username
-                </label>
-                <input
-                  type="text"
-                  value={adminUsername}
-                  onChange={(e) => setAdminUsername(e.target.value)}
-                  required
-                  className="w-full border border-zinc-700 bg-[#1C1C1F] text-white rounded-xl px-4 py-3 font-bold text-sm sm:text-base"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-extrabold uppercase tracking-wide text-zinc-200 mb-1.5">
-                  Admin Security Password / PIN
-                </label>
-                <input
-                  type="password"
-                  value={adminPassword}
-                  onChange={(e) => setAdminPassword(e.target.value)}
-                  required
-                  className="w-full border border-zinc-700 bg-[#1C1C1F] text-white rounded-xl px-4 py-3 font-mono text-sm sm:text-base"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={isLoggingIn}
-                className="w-full py-3.5 bg-gradient-to-r from-[#D4A017] to-[#B8860B] text-black font-extrabold uppercase rounded-xl flex items-center justify-center gap-2 text-sm sm:text-base cursor-pointer"
-              >
-                {isLoggingIn ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    <span>Authenticating Operator Session...</span>
-                  </>
-                ) : (
-                  <>
-                    <Lock className="w-5 h-5" />
-                    <span>Sign In to Admin Portal</span>
-                  </>
-                )}
-              </button>
-            </form>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   const headerNavItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid },
     { id: 'orders', label: 'Service Requests', icon: FileText, badge: stats.unpaid },
     { id: 'production', label: 'Status Board', icon: Layers, badge: stats.processing },
     { id: 'payments', label: 'GCash Payments', icon: Wallet, badge: stats.unverifiedPayments },
     { id: 'customers', label: 'Customers', icon: Users },
-    { id: 'staff', label: 'Admin Operators', icon: UserCheck, badge: INITIAL_STAFF.length },
+    { id: 'staff', label: 'Admin Operators', icon: UserCheck },
     { id: 'logs', label: 'User Logs', icon: ShieldCheck, badge: userLogs.length },
     { id: 'services', label: 'Services', icon: Printer },
     { id: 'reports', label: 'Reports', icon: BarChart3 },
     { id: 'notifications', label: 'Staff Chat', icon: MessageSquare, badge: stats.unreadMsgs },
-  ];
+  ].filter((item) => canAccessTab(item.id));
 
   const sidebarItems = [
     {
@@ -392,7 +294,6 @@ export function AdminPortal({
       label: 'Admin Operators',
       desc: 'Manage staff & operator roles',
       icon: UserCheck,
-      badge: INITIAL_STAFF.length,
     },
     {
       id: 'logs',
@@ -426,7 +327,7 @@ export function AdminPortal({
       desc: 'Branch & operator settings',
       icon: User,
     },
-  ];
+  ].filter((item) => canAccessTab(item.id));
 
   return (
     <div
@@ -546,11 +447,11 @@ export function AdminPortal({
 
           {(activeTab === 'staff' || activeTab === 'logs') && (
             <StaffManagement
+              key={activeTab === 'logs' ? 'logs' : 'staff'}
               userLogs={userLogs}
               onAddUserLog={onAddUserLog}
               defaultSubView={activeTab === 'logs' ? 'logs' : 'roster'}
               activeOperator={activeOperator}
-              onSelectActiveOperator={(op) => setActiveOperator(op)}
               highContrastMode={highContrastMode}
               fontSizeLevel={fontSizeLevel}
             />
@@ -575,7 +476,7 @@ export function AdminPortal({
           {activeTab === 'notifications' && (
             <Notifications
               threads={threads}
-              selectedThreadId={selectedThreadId}
+              selectedThreadId={activeThreadId}
               onSelectThread={setSelectedThreadId}
               onSendAdminReply={onSendAdminReply}
               highContrastMode={highContrastMode}
@@ -607,7 +508,7 @@ export function AdminPortal({
           { id: 'staff', label: 'Operators', icon: UserCheck },
           { id: 'logs', label: 'Logs', icon: ShieldCheck },
           { id: 'notifications', label: 'Chat', icon: MessageSquare, badge: stats.unreadMsgs },
-        ].map((tab) => {
+        ].filter((tab) => canAccessTab(tab.id)).map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
           return (
@@ -665,9 +566,7 @@ export function AdminPortal({
         isOpen={isNotifOpen}
         onClose={() => setIsNotifOpen(false)}
         notifications={notifications}
-        onMarkAllRead={() =>
-          setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })))
-        }
+        onMarkAllRead={() => setNotifications((current) => current.map((notification) => ({ ...notification, unread: false })))}
       />
 
       {isWalkInModalOpen && (
@@ -734,7 +633,7 @@ export function AdminPortal({
                   />
                 </div>
                 <div>
-                  <label className="font-extrabold block mb-1">Paid Now via GCash (₱)</label>
+                  <label className="font-extrabold block mb-1">Cash Received (pending staff verification) (₱)</label>
                   <input
                     type="number"
                     min={0}

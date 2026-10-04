@@ -6,7 +6,6 @@ import {
   Mail,
   Activity,
   PlusCircle,
-  CheckCircle2,
   X,
 } from 'lucide-react';
 import {
@@ -14,7 +13,6 @@ import {
   UserLogEntry,
   FontSizeLevel,
 } from '../../../types';
-import { INITIAL_STAFF } from '../../../data/requests';
 import { AdminUserLogsTab } from '../AdminUserLogsTab';
 
 interface StaffManagementProps {
@@ -22,7 +20,6 @@ interface StaffManagementProps {
   onAddUserLog?: (entry: Omit<UserLogEntry, 'id' | 'timestamp' | 'date'>) => void;
   defaultSubView?: 'roster' | 'logs';
   activeOperator?: StaffMember;
-  onSelectActiveOperator?: (operator: StaffMember) => void;
   highContrastMode: boolean;
   fontSizeLevel: FontSizeLevel;
 }
@@ -32,11 +29,10 @@ export function StaffManagement({
   onAddUserLog,
   defaultSubView = 'roster',
   activeOperator,
-  onSelectActiveOperator,
   highContrastMode,
   fontSizeLevel,
 }: StaffManagementProps) {
-  const [staffList, setStaffList] = useState<StaffMember[]>(INITIAL_STAFF);
+  const [staffList, setStaffList] = useState<StaffMember[]>([]);
   const [subView, setSubView] = useState<'roster' | 'logs'>(defaultSubView);
   const [roleFilter, setRoleFilter] = useState<string>('All');
   const [isAddOperatorOpen, setIsAddOperatorOpen] = useState(false);
@@ -46,86 +42,128 @@ export function StaffManagement({
   const [newOpUsername, setNewOpUsername] = useState('');
   const [newOpRole, setNewOpRole] = useState<StaffMember['role']>('Print Operator');
   const [newOpEmail, setNewOpEmail] = useState('');
-  const [newOpPhone, setNewOpPhone] = useState('0917 ');
+  const [newOpPhone, setNewOpPhone] = useState('');
+  const [newOpPassword, setNewOpPassword] = useState('');
   const [newOpShift, setNewOpShift] = useState('8:00 AM - 5:00 PM');
+  const [error, setError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    setSubView(defaultSubView);
-  }, [defaultSubView]);
-
-  const toggleShiftStatus = (staffId: string) => {
-    setStaffList((prev) =>
-      prev.map((s) => {
-        if (s.id === staffId) {
-          const nextStatus: StaffMember['status'] =
-            s.status === 'Online'
-              ? 'In Production'
-              : s.status === 'In Production'
-              ? 'Off Duty'
-              : 'Online';
-          if (onAddUserLog) {
-            onAddUserLog({
-              actorName: activeOperator
-                ? `${activeOperator.name} (${activeOperator.role})`
-                : 'Renato C. (Lead Admin)',
-              actorUsername: activeOperator?.username || 'admin_netso',
-              actorRole: 'Admin',
-              category: 'Account / System',
-              action: `Updated Operator Status -> ${nextStatus}`,
-              details: `Changed shift availability of ${s.name} (@${s.username}) to ${nextStatus}.`,
-              targetId: s.id,
-              ipAddress: '112.198.44.102',
-              device: 'Admin Service Desk · Santiago City',
-              status: 'Verified',
-            });
-          }
-          return { ...s, status: nextStatus };
-        }
-        return s;
+    let active = true;
+    void fetch('/api/staff')
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Unable to load staff accounts.');
+        if (active) setStaffList(result.staff);
       })
-    );
+      .catch((loadError: unknown) => {
+        if (active) setError(loadError instanceof Error ? loadError.message : 'Unable to load staff accounts.');
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const toggleShiftStatus = async (staff: StaffMember) => {
+    const nextStatus: StaffMember['status'] =
+      staff.status === 'Online'
+        ? 'In Production'
+        : staff.status === 'In Production'
+          ? 'Off Duty'
+          : 'Online';
+    setError('');
+    try {
+      const response = await fetch('/api/staff', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: staff.id, status: nextStatus }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Unable to update staff status.');
+      setStaffList((previous) =>
+        previous.map((item) => item.id === staff.id ? { ...item, status: nextStatus } : item)
+      );
+      onAddUserLog?.({
+        actorName: activeOperator?.name ?? '',
+        actorUsername: activeOperator?.username ?? '',
+        actorRole: 'Admin',
+        category: 'Account / System',
+        action: `Updated Operator Status -> ${nextStatus}`,
+        details: `Changed shift availability of ${staff.name} (@${staff.username}) to ${nextStatus}.`,
+        targetId: staff.id,
+        ipAddress: '',
+        device: '',
+        status: 'Verified',
+      });
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : 'Unable to update staff status.');
+    }
   };
 
-  const handleAddOperatorSubmit = (e: React.FormEvent) => {
+  const to24HourTime = (value: string) => {
+    const match = value.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if (!match) return null;
+    let hours = Number(match[1]);
+    const minutes = Number(match[2]);
+    if (hours < 1 || hours > 12 || minutes > 59) return null;
+    if (match[3].toUpperCase() === 'PM' && hours !== 12) hours += 12;
+    if (match[3].toUpperCase() === 'AM' && hours === 12) hours = 0;
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  };
+
+  const handleAddOperatorSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newOpName.trim() || !newOpUsername.trim()) return;
-    const newId = `OP-0${staffList.length + 1}`;
-    const createdOp: StaffMember = {
-      id: newId,
-      name: newOpName.trim(),
-      username: newOpUsername.trim().toLowerCase().replace(/\s+/g, '_'),
-      role: newOpRole,
-      email: newOpEmail.trim() || `${newOpUsername.trim().toLowerCase()}@netsoprints.com`,
-      phone: newOpPhone.trim(),
-      shift: newOpShift,
-      status: 'Online',
-      assignedJobs: 0,
-      completedToday: 0,
-    };
-
-    setStaffList((prev) => [createdOp, ...prev]);
-
-    if (onAddUserLog) {
-      onAddUserLog({
-        actorName: activeOperator
-          ? `${activeOperator.name} (${activeOperator.role})`
-          : 'Renato C. (Lead Admin)',
-        actorUsername: activeOperator?.username || 'admin_netso',
+    const [start, end] = newOpShift.split(/\s+-\s+/);
+    const shiftStart = start ? to24HourTime(start) : null;
+    const shiftEnd = end ? to24HourTime(end) : null;
+    if (!shiftStart || !shiftEnd) {
+      setError('Enter the shift as a start and end time, for example 8:00 AM - 5:00 PM.');
+      return;
+    }
+    setError('');
+    setIsSaving(true);
+    try {
+      const response = await fetch('/api/staff', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newOpName,
+          username: newOpUsername,
+          email: newOpEmail,
+          phone: newOpPhone,
+          password: newOpPassword,
+          role: newOpRole,
+          shiftStart,
+          shiftEnd,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Unable to create staff account.');
+      const createdOp = result.staff as StaffMember;
+      setStaffList((previous) => [createdOp, ...previous]);
+      onAddUserLog?.({
+        actorName: activeOperator?.name ?? '',
+        actorUsername: activeOperator?.username ?? '',
         actorRole: 'Admin',
         category: 'Account / System',
         action: 'Added New Admin/Staff Operator',
         details: `Registered ${createdOp.name} (@${createdOp.username}) as ${createdOp.role}.`,
         targetId: createdOp.id,
-        ipAddress: '112.198.44.102',
-        device: 'Admin Service Desk · Santiago City',
+        ipAddress: '',
+        device: '',
         status: 'Verified',
       });
+      setNewOpName('');
+      setNewOpUsername('');
+      setNewOpEmail('');
+      setNewOpPhone('');
+      setNewOpPassword('');
+      setIsAddOperatorOpen(false);
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : 'Unable to create staff account.');
+    } finally {
+      setIsSaving(false);
     }
-
-    setNewOpName('');
-    setNewOpUsername('');
-    setNewOpEmail('');
-    setIsAddOperatorOpen(false);
   };
 
   const filteredStaff = staffList.filter((s) =>
@@ -203,6 +241,7 @@ export function StaffManagement({
         />
       ) : (
         <div className="space-y-4">
+          {error && <p role="alert" className="rounded-xl border border-red-400 bg-red-50 p-3 text-sm font-semibold text-red-800">{error}</p>}
           {/* 4 Operator KPI Summary Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div
@@ -339,7 +378,7 @@ export function StaffManagement({
 
                     <button
                       type="button"
-                      onClick={() => toggleShiftStatus(stf.id)}
+                      onClick={() => void toggleShiftStatus(stf)}
                       className={`px-2.5 py-1 rounded-full text-[11px] font-extrabold border cursor-pointer shrink-0 ${
                         stf.status === 'Online'
                           ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
@@ -388,38 +427,10 @@ export function StaffManagement({
                   </div>
 
                   <div className="flex items-center justify-between gap-2 pt-1">
-                    {onSelectActiveOperator && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onSelectActiveOperator(stf);
-                          if (onAddUserLog) {
-                            onAddUserLog({
-                              actorName: `${stf.name} (${stf.role})`,
-                              actorUsername: stf.username,
-                              actorRole: stf.role === 'Lead Admin' ? 'Admin' : 'Operator',
-                              category: 'Authentication',
-                              action: 'Switched Active Admin Operator',
-                              details: `Switched active portal operator session to ${stf.name} (@${stf.username} · ${stf.role}).`,
-                              targetId: stf.id,
-                              ipAddress: '112.198.44.102',
-                              device: 'Admin Service Desk · Santiago City',
-                              status: 'Verified',
-                            });
-                          }
-                        }}
-                        disabled={isCurrentOperator}
-                        className={`flex-1 py-2 px-3 rounded-xl font-extrabold text-xs uppercase flex items-center justify-center gap-1.5 border cursor-pointer transition-all ${
-                          isCurrentOperator
-                            ? 'bg-emerald-100 text-emerald-900 border-emerald-300 cursor-default'
-                            : 'bg-[#121214] hover:bg-black text-[#D4A017] border-[#D4A017]'
-                        }`}
-                      >
-                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                        <span>
-                          {isCurrentOperator ? 'Current Operator' : 'Switch to Operator'}
-                        </span>
-                      </button>
+                    {isCurrentOperator && (
+                      <span className="flex-1 text-xs font-extrabold uppercase text-emerald-800">
+                        Current signed-in operator
+                      </span>
                     )}
 
                     <button
@@ -505,6 +516,7 @@ export function StaffManagement({
                   <label className="font-extrabold block mb-1">Mobile Number</label>
                   <input
                     type="text"
+                    required
                     value={newOpPhone}
                     onChange={(e) => setNewOpPhone(e.target.value)}
                     className="w-full border border-zinc-400 p-2.5 rounded-xl font-mono font-bold"
@@ -525,6 +537,7 @@ export function StaffManagement({
                 <label className="font-extrabold block mb-1">Work Email</label>
                 <input
                   type="email"
+                  required
                   placeholder="operator@netsoprints.com"
                   value={newOpEmail}
                   onChange={(e) => setNewOpEmail(e.target.value)}
@@ -532,11 +545,27 @@ export function StaffManagement({
                 />
               </div>
 
+              <div>
+                <label className="font-extrabold block mb-1">Temporary Password (minimum 12 characters)</label>
+                <input
+                  type="password"
+                  required
+                  minLength={12}
+                  maxLength={128}
+                  autoComplete="new-password"
+                  value={newOpPassword}
+                  onChange={(e) => setNewOpPassword(e.target.value)}
+                  className="w-full border border-zinc-400 p-2.5 rounded-xl font-mono"
+                />
+              </div>
+
+              {error && <p role="alert" className="text-sm font-semibold text-red-700">{error}</p>}
               <button
                 type="submit"
+                disabled={isSaving}
                 className="w-full py-2.5 bg-[#D4A017] hover:bg-[#B8860B] text-black font-extrabold uppercase rounded-xl border border-black cursor-pointer"
               >
-                Register Operator & Log Event
+                {isSaving ? 'Creating Account…' : 'Register Operator & Log Event'}
               </button>
             </form>
           </div>

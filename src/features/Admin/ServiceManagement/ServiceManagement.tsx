@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Printer,
   Check,
@@ -16,23 +16,68 @@ export function ServiceManagement({
   highContrastMode,
   fontSizeLevel,
 }: ServiceManagementProps) {
-  const [services, setServices] = useState<CatalogServiceItem[]>(SERVICES_LIST);
+  const [services, setServices] = useState<CatalogServiceItem[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tempPrice, setTempPrice] = useState<number>(0);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    void fetch('/api/services')
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Unable to load services.');
+        const original = new Map(SERVICES_LIST.map((service) => [service.id, service]));
+        const current = result.services.flatMap((service: {
+          id: string;
+          name: string;
+          category: CatalogServiceItem['category'];
+          basePrice: number;
+          unit: string;
+          description: string;
+          popularFor: string;
+          turnaround: string;
+          available: boolean;
+        }) => {
+          const fallback = original.get(service.id);
+          return fallback ? [{ ...fallback, ...service, icon: fallback.icon }] : [];
+        });
+        if (active) setServices(current);
+      })
+      .catch((loadError: unknown) => {
+        if (active) setError(loadError instanceof Error ? loadError.message : 'Unable to load services.');
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const updateService = async (id: string, update: { basePrice?: number; available?: boolean }) => {
+    setError('');
+    try {
+      const response = await fetch('/api/services', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, ...update }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Unable to save service changes.');
+      setServices((prev) =>
+        prev.map((service) => (service.id === id ? { ...service, ...update } : service))
+      );
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : 'Unable to save service changes.');
+    }
+  };
 
   const handleSavePrice = (id: string) => {
-    setServices((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, basePrice: tempPrice } : s))
-    );
+    void updateService(id, { basePrice: tempPrice });
     setEditingId(null);
   };
 
   const toggleAvailability = (id: string) => {
-    setServices((prev) =>
-      prev.map((s) =>
-        s.id === id ? { ...s, available: s.available === false ? true : false } : s
-      )
-    );
+    const service = services.find((item) => item.id === id);
+    if (service) void updateService(id, { available: service.available === false });
   };
 
   return (
@@ -61,6 +106,8 @@ export function ServiceManagement({
           </p>
         </div>
       </div>
+
+      {error && <p role="alert" className="rounded-xl border border-red-400 bg-red-50 p-3 text-sm font-semibold text-red-800">{error}</p>}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
         {services.map((srv) => {

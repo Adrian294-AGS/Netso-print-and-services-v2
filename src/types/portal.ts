@@ -27,7 +27,8 @@ export type OrderStatus =
   | 'In Pre-Press'
   | 'In Production'
   | 'Ready for Pickup'
-  | 'Completed';
+  | 'Completed'
+  | 'Cancelled';
 
 export interface RequestOrder {
   id: string;
