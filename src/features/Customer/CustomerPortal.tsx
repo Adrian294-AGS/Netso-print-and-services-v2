@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useRef } from 'react';
+import type { LucideIcon } from 'lucide-react';
 import {
   Printer,
   Copy,
@@ -39,22 +40,23 @@ import {
   FontSizeLevel,
   UserLogEntry,
 } from '../../types/portal';
-import { INITIAL_REQUESTS } from '../../data/mockPortalData';
 import { Header } from '../../components/Header';
 import { Sidebar } from '../../components/Sidebar';
 
 export type { FontSizeLevel } from '../../types/portal';
+type CustomerTabId = 'dashboard' | 'services' | 'requests' | 'payments' | 'messages' | 'profile';
 
 export interface CustomerServiceItem {
   id: string;
   name: string;
   category: 'Document' | 'Photo & ID' | 'Large Format' | 'Signage' | 'Merch & Gifts' | 'Marketing';
-  icon: any;
+  icon: LucideIcon;
   basePrice: number;
   unit: string;
   description: string;
   popularFor: string;
   turnaround: string;
+  available?: boolean;
 }
 
 const SERVICES_LIST: CustomerServiceItem[] = [
@@ -342,21 +344,23 @@ function FileUploader({ files, onChange, theme = 'light' }: FileUploaderProps) {
 }
 
 export interface CustomerPortalProps {
-  currentUser?: any;
+  currentUser: { id: string; name: string; username: string; email: string };
+  serviceRevision?: number;
   initialTab?: 'dashboard' | 'services' | 'requests' | 'payments' | 'messages' | 'profile';
   fontSizeLevel?: FontSizeLevel;
   setFontSizeLevel?: React.Dispatch<React.SetStateAction<FontSizeLevel>> | ((level: FontSizeLevel) => void);
   highContrastMode?: boolean;
   setHighContrastMode?: React.Dispatch<React.SetStateAction<boolean>> | ((val: boolean) => void);
-  onLogout?: () => void;
-  requests?: RequestOrder[];
-  setRequests?: React.Dispatch<React.SetStateAction<RequestOrder[]>>;
+  onLogout: () => void;
+  requests: RequestOrder[];
+  setRequests: React.Dispatch<React.SetStateAction<RequestOrder[]>>;
   onAddUserLog?: (entry: Omit<UserLogEntry, 'id' | 'timestamp' | 'date'>) => void;
   onSwitchToAdminPortal?: () => void;
 }
 
 export function CustomerPortal({
   currentUser,
+  serviceRevision = 0,
   initialTab = 'dashboard',
   fontSizeLevel = 'large',
   highContrastMode = false,
@@ -365,23 +369,17 @@ export function CustomerPortal({
   setRequests: externalSetRequests,
   onAddUserLog,
 }: CustomerPortalProps) {
-  const [internalRequests, setInternalRequests] = useState<RequestOrder[]>(INITIAL_REQUESTS);
-  const requests = externalRequests ?? internalRequests;
-  const setRequests = externalSetRequests ?? setInternalRequests;
-
-  // Always points at the latest requests, so delayed callbacks (setTimeout)
-  // never read a stale snapshot.
-  const requestsRef = useRef<RequestOrder[]>(requests);
-  requestsRef.current = requests;
+  const requests = externalRequests;
+  const setRequests = externalSetRequests;
 
   const recordUserLog = (entry: Omit<UserLogEntry, 'id' | 'timestamp' | 'date'>) => {
     if (onAddUserLog) onAddUserLog(entry);
   };
-  const displayUserName =
-    currentUser?.name || currentUser?.username || currentUser?.email || 'Alexandrie Abon';
-  const [activeTab, setActiveTab] = useState<
-    'dashboard' | 'services' | 'requests' | 'payments' | 'messages' | 'profile'
-  >(initialTab);
+  const displayUserName = currentUser.name || currentUser.username || currentUser.email;
+  const [serviceCatalog, setServiceCatalog] = useState<CustomerServiceItem[]>([]);
+  const [activeTab, setActiveTab] = useState<CustomerTabId>(initialTab);
+  const [requestStatusFilter, setRequestStatusFilter] = useState('All');
+  const [deletingRequestId, setDeletingRequestId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedOrderForReceipt, setSelectedOrderForReceipt] = useState<RequestOrder | null>(null);
@@ -391,12 +389,12 @@ export function CustomerPortal({
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [loginEmail, setLoginEmail] = useState('alexandrieabon@gmail.com');
-  const [loginPassword, setLoginPassword] = useState('••••••••');
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
   const [signupFirstName, setSignupFirstName] = useState('');
   const [signupLastName, setSignupLastName] = useState('');
   const [signupUsername, setSignupUsername] = useState('');
-  const [signupMobile, setSignupMobile] = useState('0917 ');
+  const [signupMobile, setSignupMobile] = useState('');
   const [signupEmail, setSignupEmail] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
   const [sessionUserName, setSessionUserName] = useState<string>('');
@@ -412,43 +410,99 @@ export function CustomerPortal({
   const [requestFiles, setRequestFiles] = useState<UploadedFile[]>([]);
   const [requestNotes, setRequestNotes] = useState<string>('');
 
-  // GCash Instant Checkout Modal state
+  // Manual GCash reference submission state
   const [isGCashPaymentOpen, setIsGCashPaymentOpen] = useState(false);
   const [targetOrderForPayment, setTargetOrderForPayment] = useState<RequestOrder | null>(null);
   const [paymentStep, setPaymentStep] = useState<
     'upload' | 'select' | 'redirecting' | 'processing' | 'success'
   >('select');
   const [paymentAmountType, setPaymentAmountType] = useState<'full' | 'downpayment'>('full');
-  const [gcashMobileNumber, setGcashMobileNumber] = useState('09171234567');
+  const [gcashReference, setGcashReference] = useState('');
   const [lastTxnRef, setLastTxnRef] = useState('');
   const [lastPaidAmount, setLastPaidAmount] = useState<number>(0);
 
-  const [messages, setMessages] = useState([
-    {
-      sender: 'NETSO Staff',
-      text: 'Hello Alexandrie! Your Tarpaulin service request (NETSO-90103) has been confirmed and is currently being processed by our team.',
-      time: '10:15 AM',
-      isStaff: true,
-    },
-    {
-      sender: 'You',
-      text: 'Great! Can I pay the remaining ₱288 balance directly via GCash right now?',
-      time: '10:18 AM',
-      isStaff: false,
-    },
-    {
-      sender: 'NETSO Staff',
-      text: 'Yes, absolutely! Click "Pay via GCash" on your dashboard or request card anytime to settle it.',
-      time: '10:20 AM',
-      isStaff: true,
-    },
-  ]);
+  const [messageState, setMessageState] = useState<{
+    orderId: string;
+    messages: Array<{ sender: string; text: string; time: string; isStaff: boolean }>;
+  }>({ orderId: '', messages: [] });
   const [newMessageInput, setNewMessageInput] = useState('');
 
   const customerRequests = useMemo(
-    () => requests.filter((r) => r.customerUsername === 'alex_abon'),
-    [requests]
+    () =>
+      requests.filter(
+        (request) =>
+          request.customerId === currentUser.id ||
+          request.customerUsername === currentUser.username
+      ),
+    [requests, currentUser.id, currentUser.username]
   );
+  const filteredCustomerRequests = useMemo(
+    () =>
+      requestStatusFilter === 'All'
+        ? customerRequests
+        : customerRequests.filter((request) => request.status === requestStatusFilter),
+    [customerRequests, requestStatusFilter],
+  );
+  const messageOrderId = customerRequests[0]?.id || '';
+  const messages = messageState.orderId === messageOrderId ? messageState.messages : [];
+
+  React.useEffect(() => {
+    let active = true;
+    void fetch('/api/services')
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Unable to load services.');
+        if (!Array.isArray(result.services)) return;
+        const byId = new Map(SERVICES_LIST.map((service) => [service.id, service]));
+        const fromApi = result.services.flatMap((service: {
+          id: string;
+          name: string;
+          category: CustomerServiceItem['category'];
+          basePrice: number;
+          unit: string;
+          description: string;
+          popularFor: string;
+          turnaround: string;
+          available: boolean;
+        }) => {
+          const fallback = byId.get(service.id);
+          return fallback
+            ? [{ ...fallback, ...service, icon: fallback.icon }]
+            : [];
+        });
+        if (active) setServiceCatalog(fromApi);
+      })
+      .catch((error: unknown) => console.error('Unable to load service catalog:', error));
+    return () => {
+      active = false;
+    };
+  }, [serviceRevision]);
+
+  React.useEffect(() => {
+    const orderId = customerRequests[0]?.id;
+    if (!orderId) return;
+    let active = true;
+    void fetch(`/api/messages?orderId=${encodeURIComponent(orderId)}`)
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Unable to load messages.');
+        if (active && result.thread?.messages) {
+          setMessageState({
+            orderId,
+            messages: result.thread.messages.map((message: {
+              sender: string;
+              text: string;
+              time: string;
+              isStaff: boolean;
+            }) => ({ ...message, time: new Date(message.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) })),
+          });
+        }
+      })
+      .catch((error: unknown) => console.error('Unable to load customer messages:', error));
+    return () => {
+      active = false;
+    };
+  }, [customerRequests]);
 
   const totalPaid = useMemo(
     () => customerRequests.reduce((sum, r) => sum + r.paidAmount, 0),
@@ -464,7 +518,8 @@ export function CustomerPortal({
   );
 
   const filteredServices = useMemo(() => {
-    return SERVICES_LIST.filter((srv) => {
+    return serviceCatalog.filter((srv) => {
+      if (srv.available === false) return false;
       const matchesCategory = selectedCategory === 'All' || srv.category === selectedCategory;
       const matchesSearch =
         srv.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -472,10 +527,10 @@ export function CustomerPortal({
         srv.popularFor.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
     });
-  }, [selectedCategory, searchQuery]);
+  }, [serviceCatalog, selectedCategory, searchQuery]);
 
   const handleOpenNewRequest = (service?: CustomerServiceItem) => {
-    setSelectedServiceForRequest(service || SERVICES_LIST[0]);
+    setSelectedServiceForRequest(service || serviceCatalog[0] || null);
     setRequestQty(1);
     setRequestFileType('I have ready-to-print artwork file (PDF/PNG)');
     setRequestNotes('');
@@ -483,46 +538,78 @@ export function CustomerPortal({
     setIsNewRequestModalOpen(true);
   };
 
-  const handleCreateRequestSubmit = (e: React.FormEvent) => {
+  const handleCreateRequestSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedServiceForRequest) return;
 
-    const totalAmt = selectedServiceForRequest.basePrice * requestQty;
-    const newReq: RequestOrder = {
-      id: `NETSO-${Math.floor(90000 + Math.random() * 9999)}`,
-      customerId: 'NET-9081',
-      customerName: sessionUserName || displayUserName,
-      customerUsername: 'alex_abon',
-      customerPhone: '0917 123 4567',
-      customerEmail: 'alexandrieabon@gmail.com',
-      service: `${selectedServiceForRequest.name} (x${requestQty})`,
-      category: selectedServiceForRequest.category,
-      date: new Date().toISOString().split('T')[0],
-      amount: totalAmt,
-      paidAmount: 0,
-      unpaidAmount: totalAmt,
-      status: 'Unpaid Balance',
-      progressStage: 1,
-      notes: requestNotes ? `${requestFileType} - ${requestNotes}` : requestFileType,
-      files: requestFiles,
-    };
+    try {
+      const orderResponse = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          service: selectedServiceForRequest.id,
+          quantity: requestQty,
+          notes: requestNotes ? `${requestFileType} - ${requestNotes}` : requestFileType,
+        }),
+      });
+      const orderResult = await orderResponse.json();
+      if (!orderResponse.ok || !orderResult.order) {
+        throw new Error(orderResult.error || 'Unable to create the order.');
+      }
+      const newReq = orderResult.order as RequestOrder;
+      const uploaded: UploadedFile[] = [];
+      const typeByExtension: Record<string, string> = {
+        pdf: 'application/pdf',
+        png: 'image/png',
+        jpg: 'image/jpeg',
+        jpeg: 'image/jpeg',
+        ai: 'application/postscript',
+        psd: 'image/vnd.adobe.photoshop',
+      };
 
-    setRequests((prev) => [newReq, ...prev]);
-    recordUserLog({
-      actorName: sessionUserName || displayUserName,
-      actorUsername: 'alex_abon',
-      actorRole: 'Customer',
-      category: 'Order Management',
-      action: 'Created Service Request',
-      details: `Submitted ${newReq.service} totaling ₱${totalAmt}.`,
-      targetId: newReq.id,
-      ipAddress: '112.198.81.209',
-      device: 'Chrome Web App · Santiago City',
-      status: 'Success',
-    });
-    setRequestFiles([]);
-    setIsNewRequestModalOpen(false);
-    openGCashPayment(newReq);
+      for (const file of requestFiles) {
+        if (!file.file) throw new Error(`The selected file ${file.name} is no longer available. Select it again.`);
+        const contentType = file.file.type || typeByExtension[file.ext];
+        const signResponse = await fetch('/api/uploads', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orderId: newReq.id,
+            fileName: file.name,
+            contentType,
+            size: file.size,
+          }),
+        });
+        const signed = await signResponse.json();
+        if (!signResponse.ok) throw new Error(signed.error || `Unable to prepare ${file.name} for upload.`);
+        const uploadResponse = await fetch(signed.uploadUrl, {
+          method: 'PUT',
+          headers: signed.requiredHeaders,
+          body: file.file,
+        });
+        if (!uploadResponse.ok) throw new Error(`Cloud file upload failed for ${file.name}.`);
+        const completeResponse = await fetch('/api/uploads/complete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-file-name': file.name },
+          body: JSON.stringify({ orderId: newReq.id, key: signed.key }),
+        });
+        const completed = await completeResponse.json();
+        if (!completeResponse.ok) throw new Error(completed.error || `Unable to attach ${file.name} to the order.`);
+        uploaded.push(completed.file as UploadedFile);
+      }
+
+      const savedOrder = { ...newReq, files: uploaded };
+      setRequests((previous) => [
+        savedOrder,
+        ...previous.filter((request) => request.id !== savedOrder.id),
+      ]);
+      setRequestFiles([]);
+      setIsNewRequestModalOpen(false);
+      openGCashPayment(savedOrder);
+    } catch (error) {
+      console.error('Unable to submit print request:', error);
+      window.alert(error instanceof Error ? error.message : 'Unable to submit the request.');
+    }
   };
 
   const openGCashPayment = (order?: RequestOrder) => {
@@ -530,12 +617,50 @@ export function CustomerPortal({
     if (!target) return;
     setTargetOrderForPayment(target);
     setPaymentAmountType('full');
-    setPaymentStep(target.files.length === 0 ? 'upload' : 'select');
+    setPaymentStep('select');
     setIsGCashPaymentOpen(true);
   };
 
+  const handleDeleteRequest = async (order: RequestOrder) => {
+    if (
+      order.status !== 'Unpaid Balance' ||
+      order.progressStage !== 1 ||
+      order.paidAmount > 0 ||
+      !window.confirm(`Permanently delete unpaid request ${order.id}? This cannot be undone.`)
+    ) {
+      return;
+    }
+
+    setDeletingRequestId(order.id);
+    try {
+      const response = await fetch('/api/orders', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: order.id }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.ok) {
+        throw new Error(result.error || 'Unable to delete this request.');
+      }
+      setRequests((previous) => previous.filter((request) => request.id !== order.id));
+      if (targetOrderForPayment?.id === order.id) {
+        setIsGCashPaymentOpen(false);
+        setTargetOrderForPayment(null);
+      }
+      if (selectedOrderForReceipt?.id === order.id) setSelectedOrderForReceipt(null);
+      if (result.storageCleanupWarning) {
+        window.alert(result.error || 'The request was deleted, but its stored files could not be removed.');
+      }
+    } catch (error) {
+      console.error('Unable to delete service request:', error);
+      window.alert(error instanceof Error ? error.message : 'Unable to delete this request.');
+    } finally {
+      setDeletingRequestId(null);
+    }
+  };
+
   const updateOrderFiles = (orderId: string, files: UploadedFile[]) => {
-    setRequests((prev) => prev.map((req) => (req.id === orderId ? { ...req, files } : req)));
+    if (files.length === targetOrderForPayment?.files.length) return;
     setTargetOrderForPayment((prev) => (prev && prev.id === orderId ? { ...prev, files } : prev));
   };
 
@@ -552,7 +677,7 @@ export function CustomerPortal({
    * Now the updated order is computed first, and every state setter is
    * called separately, outside of any updater function.
    */
-  const handleProceedToGCash = () => {
+  const handleProceedToGCash = async () => {
     if (!targetOrderForPayment) return;
 
     const orderId = targetOrderForPayment.id;
@@ -564,104 +689,80 @@ export function CustomerPortal({
 
     if (payAmount <= 0) return;
 
-    setLastPaidAmount(payAmount);
-    setPaymentStep('redirecting');
-
-    setTimeout(() => {
-      setPaymentStep('processing');
-
-      setTimeout(() => {
-        const newRef = `GC-${Math.floor(1000 + Math.random() * 8999)}-${Math.floor(
-          1000 + Math.random() * 8999
-        )}-${Math.floor(10 + Math.random() * 89)}`;
-
-        // Read the latest data, not the snapshot from when the button was clicked.
-        const currentOrder = requestsRef.current.find((req) => req.id === orderId);
-        if (!currentOrder) {
-          setPaymentStep('select');
-          return;
-        }
-
-        const newPaid = currentOrder.paidAmount + payAmount;
-        const newUnpaid = Math.max(0, currentOrder.amount - newPaid);
-        const newStatus = newUnpaid === 0 ? 'In Production' : 'In Pre-Press';
-
-        const updatedOrder: RequestOrder = {
-          ...currentOrder,
-          paidAmount: newPaid,
-          unpaidAmount: newUnpaid,
-          status: currentOrder.status === 'Unpaid Balance' ? newStatus : currentOrder.status,
-          progressStage: currentOrder.progressStage === 1 ? 2 : currentOrder.progressStage,
-          paymentMethod: 'GCash',
-          gcashRefNo: newRef,
-          paymentVerified: true,
-          notes: `${currentOrder.notes} [Paid ₱${payAmount} via GCash - Ref: ${newRef}]`,
-        };
-
-        // Pure updater: it only returns the new list, no other setState inside.
-        setRequests((prev) => prev.map((req) => (req.id === orderId ? updatedOrder : req)));
-
-        setTargetOrderForPayment(updatedOrder);
-        setLastTxnRef(newRef);
-
-        recordUserLog({
-          actorName: sessionUserName || displayUserName,
-          actorUsername: 'alex_abon',
-          actorRole: 'Customer',
-          category: 'GCash Payment',
-          action: 'Completed GCash Checkout',
-          details: `Paid ₱${payAmount} via GCash (Ref: ${newRef}) for order ${orderId}.`,
-          targetId: orderId,
-          ipAddress: '112.198.81.209',
-          device: 'Chrome Web App · GCash',
-          status: 'Verified',
-        });
-
-        setPaymentStep('success');
-      }, 900);
-    }, 800);
+    if (!gcashReference.trim()) {
+      window.alert('Enter the GCash reference number after completing payment in GCash.');
+      return;
+    }
+    try {
+      const response = await fetch('/api/payments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requestId: orderId,
+          amount: payAmount,
+          paymentType: paymentAmountType === 'full' ? 'Full Payment' : '50% Down Payment',
+          method: 'GCash',
+          gcashRefNo: gcashReference.trim(),
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Unable to submit payment for review.');
+      setLastPaidAmount(payAmount);
+      setLastTxnRef(gcashReference.trim());
+      setPaymentStep('success');
+      const ordersResponse = await fetch('/api/orders');
+      const ordersResult = await ordersResponse.json();
+      if (ordersResponse.ok && Array.isArray(ordersResult.orders)) {
+        setRequests(ordersResult.orders);
+      }
+    } catch (error) {
+      console.error('Unable to submit payment reference:', error);
+      window.alert(error instanceof Error ? error.message : 'Unable to submit payment reference.');
+    }
   };
 
-  const handleSendMessage = () => {
-    if (!newMessageInput.trim()) return;
-    setMessages([
-      ...messages,
-      { sender: 'You', text: newMessageInput, time: 'Just now', isStaff: false },
-    ]);
-    recordUserLog({
-      actorName: sessionUserName || displayUserName,
-      actorUsername: 'alex_abon',
-      actorRole: 'Customer',
-      category: 'Staff Chat',
-      action: 'Sent Chat Message to Staff',
-      details: `Customer message: "${newMessageInput.trim()}"`,
-      targetId: 'NETSO-90103',
-      ipAddress: '112.198.81.209',
-      device: 'Chrome Web App · Santiago City',
-      status: 'Success',
-    });
-    setNewMessageInput('');
+  const handleSendMessage = async () => {
+    const orderId = customerRequests[0]?.id;
+    if (!newMessageInput.trim() || !orderId) return;
+    try {
+      const response = await fetch('/api/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId, text: newMessageInput.trim() }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Unable to send message.');
+      setMessageState({
+        orderId,
+        messages: result.thread.messages.map((message: {
+          sender: string;
+          text: string;
+          time: string;
+          isStaff: boolean;
+        }) => ({ ...message, time: new Date(message.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) })),
+      });
+      setNewMessageInput('');
+    } catch (error) {
+      console.error('Unable to send message:', error);
+      window.alert(error instanceof Error ? error.message : 'Unable to send message.');
+    }
   };
 
   const confirmLogout = () => {
     setIsLogoutModalOpen(false);
     recordUserLog({
       actorName: sessionUserName || displayUserName,
-      actorUsername: 'alex_abon',
+      actorUsername: currentUser.username,
       actorRole: 'Customer',
       category: 'Authentication',
       action: 'Customer Session Sign-Out',
       details: `Customer ${sessionUserName || displayUserName} signed out of Customer Portal.`,
-      targetId: 'NET-9081',
-      ipAddress: '112.198.81.209',
-      device: 'Chrome Web App · Santiago City',
+      targetId: currentUser.id,
+      ipAddress: '',
+      device: '',
       status: 'Success',
     });
-    if (onLogout) {
-      onLogout();
-    } else {
-      setIsLoggedIn(false);
-    }
+    onLogout?.();
   };
 
   if (!isLoggedIn) {
@@ -988,7 +1089,7 @@ export function CustomerPortal({
         subtitle="Commercial Digital Printing, Signage & Service Request Portal"
         navItems={headerNavItems}
         activeTab={activeTab}
-        onSelectTab={(id) => setActiveTab(id as any)}
+        onSelectTab={(id) => setActiveTab(id as CustomerTabId)}
         userInitials={userInitials}
         userName={activeDisplayName}
         userRoleLabel="Verified Client"
@@ -1006,12 +1107,12 @@ export function CustomerPortal({
           menuHeading="NAVIGATION MENU"
           items={sidebarItems}
           activeTab={activeTab}
-          onSelectTab={(id) => setActiveTab(id as any)}
+          onSelectTab={(id) => setActiveTab(id as CustomerTabId)}
           calloutBadge="GCASH SETTLEMENT"
           calloutTitle="Pay Balance Anytime"
           calloutDesc={
             unpaidBalance > 0
-              ? `You have ₱${unpaidBalance.toLocaleString()} remaining balance ready for GCash checkout.`
+              ? `You have ₱${unpaidBalance.toLocaleString()} remaining balance. Submit a GCash reference for staff review.`
               : 'All your active orders are settled.'
           }
           calloutButtonLabel="Pay Balance Now"
@@ -1291,7 +1392,32 @@ export function CustomerPortal({
                   <span>+ Create Print Order</span>
                 </button>
               </div>
-              {customerRequests.map((req) => (
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                <label htmlFor="request-status-filter" className="text-sm font-bold text-zinc-700">
+                  Filter by status
+                </label>
+                <select
+                  id="request-status-filter"
+                  value={requestStatusFilter}
+                  onChange={(event) => setRequestStatusFilter(event.target.value)}
+                  className="w-full sm:w-auto min-w-48 px-3 py-2 rounded-lg border border-zinc-300 bg-white text-zinc-900 font-semibold text-sm focus:outline-none focus:ring-2 focus:ring-[#D4A017]"
+                >
+                  <option value="All">All statuses</option>
+                  <option value="Unpaid Balance">Unpaid Balance</option>
+                  <option value="In Pre-Press">In Pre-Press</option>
+                  <option value="In Production">In Production</option>
+                  <option value="Ready for Pickup">Ready for Pickup</option>
+                  <option value="Completed">Completed</option>
+                  <option value="Cancelled">Cancelled</option>
+                </select>
+              </div>
+              {filteredCustomerRequests.length === 0 ? (
+                <div className="p-5 rounded-2xl border border-zinc-300 bg-white text-zinc-600 text-sm">
+                  {customerRequests.length === 0
+                    ? 'You do not have any service requests yet.'
+                    : 'No service requests match this status.'}
+                </div>
+              ) : filteredCustomerRequests.map((req) => (
                 <div
                   key={req.id}
                   className="p-5 rounded-2xl border bg-white border-zinc-300 text-zinc-950 space-y-3.5 shadow-xs"
@@ -1311,25 +1437,42 @@ export function CustomerPortal({
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                     <span className="text-xs sm:text-sm text-zinc-500">{req.notes}</span>
-                    {req.unpaidAmount > 0 ? (
-                      <button
-                        type="button"
-                        onClick={() => openGCashPayment(req)}
-                        className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-sm rounded-xl flex items-center gap-2 cursor-pointer"
-                      >
-                        <Wallet className="w-4 h-4" />
-                        <span>Pay Remaining ₱{req.unpaidAmount} via GCash</span>
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setSelectedOrderForReceipt(req)}
-                        className="px-4 py-2 border border-zinc-400 hover:bg-zinc-100 text-zinc-900 font-bold text-xs sm:text-sm rounded-xl flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <Receipt className="w-4 h-4" />
-                        <span>View Official Receipt</span>
-                      </button>
-                    )}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {req.unpaidAmount > 0 && req.status !== 'Cancelled' ? (
+                        <button
+                          type="button"
+                          onClick={() => openGCashPayment(req)}
+                          className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-sm rounded-xl flex items-center gap-2 cursor-pointer"
+                        >
+                          <Wallet className="w-4 h-4" />
+                          <span>Pay Remaining ₱{req.unpaidAmount} via GCash</span>
+                        </button>
+                      ) : req.status !== 'Cancelled' ? (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedOrderForReceipt(req)}
+                          className="px-4 py-2 border border-zinc-400 hover:bg-zinc-100 text-zinc-900 font-bold text-xs sm:text-sm rounded-xl flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Receipt className="w-4 h-4" />
+                          <span>View Official Receipt</span>
+                        </button>
+                      ) : null}
+                      {req.status === 'Unpaid Balance' && req.progressStage === 1 && req.paidAmount === 0 && (
+                        <button
+                          type="button"
+                          disabled={deletingRequestId === req.id}
+                          onClick={() => void handleDeleteRequest(req)}
+                          className="px-4 py-2 border border-red-300 bg-red-50 hover:bg-red-100 text-red-700 font-bold text-xs sm:text-sm rounded-xl flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {deletingRequestId === req.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
+                          <span>{deletingRequestId === req.id ? 'Deleting...' : 'Delete Request'}</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -1452,7 +1595,7 @@ export function CustomerPortal({
                 <div>
                   <h2 className="font-extrabold text-xl sm:text-2xl">{activeDisplayName}</h2>
                   <p className="text-sm sm:text-base text-zinc-600 mt-0.5">
-                    Verified Commercial Client · ID: #NET-9081
+                    Customer account · {currentUser.email}
                   </p>
                 </div>
                 <button
@@ -1488,7 +1631,7 @@ export function CustomerPortal({
             <button
               key={tab.id}
               type="button"
-              onClick={() => setActiveTab(tab.id as any)}
+              onClick={() => setActiveTab(tab.id as CustomerTabId)}
               className={`flex-1 py-1 px-1 flex flex-col items-center justify-center gap-1 rounded-lg transition-all min-h-[48px] relative ${
                 isActive ? 'text-[#D4A017] font-black' : 'text-zinc-400 hover:text-zinc-200'
               }`}
@@ -1570,7 +1713,7 @@ export function CustomerPortal({
                   + Create New Print Order
                 </h3>
                 <p className="text-xs sm:text-sm text-zinc-600 font-medium mt-0.5">
-                  Instant cost calculation and immediate production queue placement.
+                  Pricing uses the active service catalog. Work begins after staff review.
                 </p>
               </div>
             </div>
@@ -1583,12 +1726,12 @@ export function CustomerPortal({
                 <select
                   value={selectedServiceForRequest.id}
                   onChange={(e) => {
-                    const found = SERVICES_LIST.find((s) => s.id === e.target.value);
+                    const found = serviceCatalog.find((s) => s.id === e.target.value);
                     if (found) setSelectedServiceForRequest(found);
                   }}
                   className="w-full border border-zinc-400 bg-white px-3.5 py-2.5 rounded-xl font-bold text-sm sm:text-base text-zinc-950 focus:outline-none focus:ring-2 focus:ring-[#D4A017]"
                 >
-                  {SERVICES_LIST.map((s) => (
+                  {serviceCatalog.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.name} — ₱{s.basePrice} ({s.unit})
                     </option>
@@ -1674,7 +1817,7 @@ export function CustomerPortal({
                   type="submit"
                   className="flex-1 py-3 px-4 bg-[#D4A017] hover:bg-[#B8860B] text-black font-extrabold uppercase rounded-xl border border-black text-xs sm:text-sm cursor-pointer transition-colors shadow-xs"
                 >
-                  SUBMIT &amp; PROCEED TO GCASH
+                  SUBMIT ORDER &amp; CONTINUE
                 </button>
                 <button
                   type="button"
@@ -1689,7 +1832,7 @@ export function CustomerPortal({
         </div>
       )}
 
-      {/* GCash Instant Checkout Modal */}
+      {/* Manual GCash reference submission modal */}
       {isGCashPaymentOpen && targetOrderForPayment && (
         <div
           className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
@@ -1710,10 +1853,10 @@ export function CustomerPortal({
                 </div>
                 <div>
                   <h3 className="font-extrabold text-base sm:text-lg text-white leading-tight">
-                    GCash Instant Checkout
+                    Submit GCash Payment Reference
                   </h3>
                   <span className="text-xs text-blue-300 font-mono block mt-0.5">
-                    NETSO Prints &amp; Ads · 256-Bit SSL Encrypted
+                    NETSO Prints &amp; Ads · Staff review required
                   </span>
                 </div>
               </div>
@@ -1721,7 +1864,7 @@ export function CustomerPortal({
                 type="button"
                 onClick={() => setIsGCashPaymentOpen(false)}
                 className="text-zinc-400 hover:text-white p-1 rounded-lg cursor-pointer"
-                aria-label="Close checkout"
+                aria-label="Close payment submission"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1841,14 +1984,15 @@ export function CustomerPortal({
 
                 <div>
                   <label className="font-extrabold text-xs sm:text-sm text-white block mb-1.5">
-                    Registered GCash Mobile Number
+                    GCash Transaction Reference Number
                   </label>
                   <div className="relative">
                     <Phone className="w-4 h-4 text-zinc-400 absolute left-3.5 top-3.5" />
                     <input
                       type="text"
-                      value={gcashMobileNumber}
-                      onChange={(e) => setGcashMobileNumber(e.target.value)}
+                      value={gcashReference}
+                      onChange={(e) => setGcashReference(e.target.value)}
+                      placeholder="Enter reference from your GCash receipt"
                       className="w-full bg-[#050C1A] border border-blue-600/80 rounded-xl pl-10 pr-4 py-2.5 font-mono font-bold text-sm sm:text-base text-yellow-400 focus:outline-none focus:ring-2 focus:ring-blue-400"
                     />
                   </div>
@@ -1859,7 +2003,7 @@ export function CustomerPortal({
                   onClick={handleProceedToGCash}
                   className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-extrabold uppercase rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm shadow-lg cursor-pointer transition-all"
                 >
-                  <span>AUTHORIZE GCASH PAYMENT</span>
+                  <span>SUBMIT REFERENCE FOR REVIEW</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </div>
@@ -1901,9 +2045,9 @@ export function CustomerPortal({
                 </div>
 
                 <div>
-                  <h4 className="font-black text-xl sm:text-2xl text-white">Payment Successful!</h4>
+                  <h4 className="font-black text-xl sm:text-2xl text-white">Payment Submitted</h4>
                   <p className="text-xs sm:text-sm text-blue-200 mt-1">
-                    Your GCash transaction with NETSO Prints &amp; Ads has been officially recorded.
+                    Staff will verify your payment reference. Your order balance will update after approval.
                   </p>
                 </div>
 
@@ -1919,7 +2063,7 @@ export function CustomerPortal({
                     </span>
                   </div>
                   <div className="border-t border-blue-900/70 pt-2.5 flex items-center justify-between">
-                    <span className="text-zinc-300 font-medium">Amount Paid:</span>
+                    <span className="text-zinc-300 font-medium">Submitted Amount:</span>
                     <span className="font-mono font-bold text-emerald-400">
                       ₱{lastPaidAmount.toLocaleString()}
                     </span>

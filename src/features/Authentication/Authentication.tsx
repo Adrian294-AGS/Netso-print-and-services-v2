@@ -1,14 +1,17 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Package, Printer, ShieldAlert, ShieldCheck } from 'lucide-react';
-import Login, { type LoginFormData, type UserRole } from './Login';
+import { Package, Printer, ShieldCheck } from 'lucide-react';
+import Login, { type LoginFormData } from './Login';
 import Signup, { type SignupFormData } from './Signup';
 
 export interface AuthenticatedUser {
   name: string;
   identifier: string;
-  role: UserRole;
+  role: 'customer' | 'staff' | 'admin';
+  id: string;
+  username?: string | null;
+  staffRole?: string;
 }
 
 interface AuthenticationProps {
@@ -19,50 +22,70 @@ type AuthMode = 'login' | 'signup';
 
 export function Authentication({ onAuthenticated }: AuthenticationProps) {
   const [mode, setMode] = useState<AuthMode>('login');
-  const [role, setRole] = useState<UserRole>('customer');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [logoError, setLogoError] = useState(false);
+  const [authError, setAuthError] = useState('');
 
   const switchMode = (nextMode: AuthMode) => {
     setMode(nextMode);
-    if (nextMode === 'signup') setRole('customer');
   };
 
-  const selectRole = (nextRole: UserRole) => {
-    setRole(nextRole);
-    if (nextRole !== 'customer') setMode('login');
-  };
-
-  const completeAuthentication = (user: AuthenticatedUser, delay: number) => {
+  const completeAuthentication = (user: AuthenticatedUser) => {
     setIsSubmitting(true);
-    window.setTimeout(() => {
+    setAuthError('');
+    setIsSubmitting(false);
+    onAuthenticated(user);
+  };
+
+  const handleApiAuthentication = async (endpoint: string, body: Record<string, string>) => {
+    setIsSubmitting(true);
+    setAuthError('');
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(body),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.user) {
+        throw new Error(result.error || 'Authentication failed.');
+      }
+      const apiUser = result.user;
+      completeAuthentication({
+        id: apiUser.id,
+        username: apiUser.username,
+        staffRole: apiUser.staffRole,
+        name: apiUser.name,
+        identifier: apiUser.identifier,
+        role: apiUser.role,
+      });
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : 'Unable to sign in. Please try again.');
+    } finally {
       setIsSubmitting(false);
-      onAuthenticated(user);
-    }, delay);
+    }
   };
 
   const handleLogin = (data: LoginFormData) => {
-    const identifier = role === 'customer' ? data.email : data.idNumber;
-    const name =
-      role === 'customer'
-        ? data.email.toLowerCase().includes('alexandrie')
-          ? 'Alexandrie Abon'
-          : data.email.split('@')[0] || 'Customer'
-        : role === 'staff'
-        ? 'Marco Villanueva'
-        : 'Ron Castillo';
-    completeAuthentication({ name, identifier, role }, 500);
+    void handleApiAuthentication('/api/auth/login', {
+      email: data.email,
+      password: data.password,
+    });
   };
 
   const handleSignup = (data: SignupFormData) => {
-    completeAuthentication({ name: data.fullName, identifier: data.email, role: 'customer' }, 500);
+    void handleApiAuthentication('/api/auth/register', {
+      fullName: data.fullName,
+      email: data.email,
+      phone: data.phone,
+      password: data.password,
+    });
   };
 
   const handleGoogleAuth = () => {
-    completeAuthentication(
-      { name: 'Alexandrie Abon', identifier: 'alexandrieabon@gmail.com', role: 'customer' },
-      500
-    );
+    setIsSubmitting(true);
+    window.location.assign('/api/auth/google');
   };
 
   return (
@@ -151,73 +174,31 @@ export function Authentication({ onAuthenticated }: AuthenticationProps) {
                     </button>
                     <button
                       type="button"
-                      disabled={role !== 'customer'}
                       onClick={() => switchMode('signup')}
-                      className={`px-5 py-2 text-sm font-bold rounded-lg transition-all ${
+                      className={`px-5 py-2 text-sm font-bold rounded-lg transition-all cursor-pointer ${
                         mode === 'signup'
-                          ? 'bg-amber-500 text-neutral-950 shadow-md cursor-pointer'
-                          : role === 'customer'
-                          ? 'text-neutral-300 hover:text-white cursor-pointer'
-                          : 'text-neutral-600 cursor-not-allowed opacity-50'
+                          ? 'bg-amber-500 text-neutral-950 shadow-md'
+                          : 'text-neutral-300 hover:text-white'
                       }`}
                     >
                       Sign Up
                     </button>
                   </div>
 
-                  {role === 'customer' && (
-                    <span className="text-sm text-neutral-300">
-                      {mode === 'login' ? 'New customer?' : 'Already registered?'}{' '}
-                      <button
-                        type="button"
-                        onClick={() => switchMode(mode === 'login' ? 'signup' : 'login')}
-                        className="text-amber-400 font-bold hover:underline ml-1 cursor-pointer"
-                      >
-                        {mode === 'login' ? 'Create Account' : 'Log In'}
-                      </button>
-                    </span>
-                  )}
+                  <span className="text-sm text-neutral-300">
+                    {mode === 'login' ? 'New customer?' : 'Already registered?'}{' '}
+                    <button
+                      type="button"
+                      onClick={() => switchMode(mode === 'login' ? 'signup' : 'login')}
+                      className="text-amber-400 font-bold hover:underline ml-1 cursor-pointer"
+                    >
+                      {mode === 'login' ? 'Create Account' : 'Log In'}
+                    </button>
+                  </span>
                 </div>
-
-                <div className="space-y-2">
-                  <label className="text-xs sm:text-sm font-bold text-amber-400 uppercase tracking-wider block">
-                    Select Portal Account Type
-                  </label>
-                  <div className="grid grid-cols-3 gap-2.5">
-                    {(['customer', 'staff', 'admin'] as UserRole[]).map((selectedRole) => (
-                      <button
-                        key={selectedRole}
-                        type="button"
-                        onClick={() => selectRole(selectedRole)}
-                        className={`py-2.5 px-3.5 text-sm font-bold rounded-xl border capitalize transition-all text-center cursor-pointer ${
-                          role === selectedRole
-                            ? 'bg-amber-500/15 border-amber-500 text-amber-300 shadow-sm'
-                            : 'bg-neutral-950 border-neutral-800 text-neutral-300 hover:border-neutral-700 hover:text-white'
-                        }`}
-                      >
-                        {selectedRole === 'staff'
-                          ? 'Print Staff'
-                          : selectedRole === 'admin'
-                          ? 'Shop Admin'
-                          : 'Customer'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {role !== 'customer' && (
-                  <div className="p-3.5 bg-neutral-950 rounded-xl border border-amber-500/30 text-xs sm:text-sm text-neutral-200 flex items-start gap-3">
-                    <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-                    <span>
-                      Internal <strong className="text-amber-300">{role.toUpperCase()}</strong> access
-                      requires a registered <strong className="text-amber-300">ID Number</strong> (e.g.
-                      STF-1024 / ADM-8001) and password pre-provisioned by shop management.
-                    </span>
-                  </div>
-                )}
               </div>
 
-              {role === 'customer' && (
+              {mode === 'login' && (
                 <GoogleLoginButton
                   isSubmitting={isSubmitting}
                   mode={mode}
@@ -225,8 +206,14 @@ export function Authentication({ onAuthenticated }: AuthenticationProps) {
                 />
               )}
 
+              {authError && (
+                <p role="alert" className="rounded-xl border border-red-500/40 bg-red-950/30 p-3 text-sm font-semibold text-red-300">
+                  {authError}
+                </p>
+              )}
+
               {mode === 'login' ? (
-                <Login role={role} isSubmitting={isSubmitting} onSubmit={handleLogin} />
+                <Login isSubmitting={isSubmitting} onSubmit={handleLogin} />
               ) : (
                 <Signup isSubmitting={isSubmitting} onSubmit={handleSignup} />
               )}

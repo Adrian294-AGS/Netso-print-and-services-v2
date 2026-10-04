@@ -60,6 +60,12 @@ const STATUS_OPTIONS: { status: OrderStatus; stage: number; label: string; short
     label: '5. Completed (Released to Customer)',
     shortLabel: '5. Completed',
   },
+  {
+    status: 'Cancelled',
+    stage: 1,
+    label: 'Cancelled',
+    shortLabel: 'Cancelled',
+  },
 ];
 
 interface RequestDetailsModalProps {
@@ -93,15 +99,12 @@ export function AdminRequestDetailsModal({
   );
   const [adminNote, setAdminNote] = useState('');
   const [statusSaved, setStatusSaved] = useState(false);
-  const [fileDownloaded, setFileDownloaded] = useState<string | null>(null);
-  const [previewFileId, setPreviewFileId] = useState<string | null>(null);
 
   useEffect(() => {
     if (order) {
       setSelectedStatus(order.status);
       setAdminNote('');
       setStatusSaved(false);
-      setPreviewFileId(null);
     }
   }, [order]);
 
@@ -112,7 +115,7 @@ export function AdminRequestDetailsModal({
     onUpdateStatus(
       order.id,
       selectedStatus,
-      matched ? matched.stage : order.progressStage,
+      selectedStatus === 'Cancelled' ? order.progressStage : matched ? matched.stage : order.progressStage,
       adminNote.trim() || undefined
     );
     setStatusSaved(true);
@@ -282,55 +285,28 @@ export function AdminRequestDetailsModal({
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setPreviewFileId((prev) => (prev === f.id ? null : f.id))
-                        }
-                        className="px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-extrabold text-xs rounded-lg border border-zinc-300 flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                        <span>{previewFileId === f.id ? 'HIDE INFO' : 'INSPECT'}</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setFileDownloaded(f.id);
-                          setPreviewFileId(f.id);
-                          setTimeout(() => setFileDownloaded(null), 1800);
-                        }}
+                      {['pdf', 'png', 'jpg', 'jpeg'].includes(f.ext.toLowerCase()) && (
+                        <a
+                          href={`/api/uploads/${encodeURIComponent(f.id)}?view=1`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-extrabold text-xs rounded-lg border border-zinc-300 flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>VIEW FILE</span>
+                        </a>
+                      )}
+                      <a
+                        href={`/api/uploads/${encodeURIComponent(f.id)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
                         className="px-3.5 py-1.5 bg-zinc-900 hover:bg-black text-[#D4A017] font-extrabold text-xs rounded-lg border border-[#D4A017] flex items-center gap-1.5 shrink-0 cursor-pointer"
                       >
-                        {fileDownloaded === f.id ? (
-                          <>
-                            <Check className="w-3.5 h-3.5 text-emerald-400" />
-                            <span className="text-emerald-400">OPENED</span>
-                          </>
-                        ) : (
-                          <>
-                            <Download className="w-3.5 h-3.5" />
-                            <span>VIEW FILE</span>
-                          </>
-                        )}
-                      </button>
+                        <Download className="w-3.5 h-3.5" />
+                        <span>DOWNLOAD</span>
+                      </a>
                     </div>
                   </div>
-
-                  {previewFileId === f.id && (
-                    <div className="p-3 rounded-xl bg-amber-50/90 border border-[#D4A017] text-zinc-950 text-xs flex items-center justify-between gap-3">
-                      <div>
-                        <strong className="font-extrabold block text-[#B8860B]">
-                          Pre-Press Artwork File Ready: {f.name}
-                        </strong>
-                        <span className="text-zinc-600 font-medium">
-                          Format: {f.ext.toUpperCase()} · Size: {formatBytes(f.size)} · Color Profile: CMYK 300 DPI Verified
-                        </span>
-                      </div>
-                      <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 font-extrabold shrink-0">
-                        ✓ Print Ready
-                      </span>
-                    </div>
-                  )}
                 </div>
               ))}
             </div>

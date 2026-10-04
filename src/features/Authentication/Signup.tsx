@@ -50,8 +50,8 @@ export function Signup({ isSubmitting, onSubmit }: SignupProps) {
 
     if (!formData.password) {
       nextErrors.password = 'Password is required.';
-    } else if (formData.password.length < 8) {
-      nextErrors.password = 'Password must be at least 8 characters long.';
+    } else if (formData.password.length < 12) {
+      nextErrors.password = 'Password must be at least 12 characters long.';
     }
 
     if (!formData.confirmPassword) {
