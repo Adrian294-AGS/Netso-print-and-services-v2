@@ -1,0 +1,35 @@
+{
+  "sessionId": "BR-20261010-007",
+  "timestamp": "2026-10-10T06:23:49.756Z",
+  "originalPrompt": "",
+  "status": "success",
+  "operationCount": 1,
+  "operationTypes": [
+    "terminal_command"
+  ],
+  "operations": [
+    {
+      "operationIndex": 0,
+      "operationId": "OP-20261010-142349-042",
+      "kind": "terminal_command",
+      "status": "success",
+      "message": "Terminal command executed successfully.\nOutput:\nimport 'server-only';\n\nexport type RealtimeTopic = 'orders' | 'payments' | 'messages' | 'services';\n\nexport interface RealtimeEvent {\n  topic: RealtimeTopic;\n  orderId?: string;\n  targetUserIds?: string[];\n  targetRoles?: string[];\n  notification?: {\n    text: string;\n    category: 'Order' | 'Payment' | 'Message' | 'Service';\n  };\n}\n\ndeclare global {\n  var __NETSO_REALTIME_PUBLISH__: ((event: RealtimeEvent) => void) | undefined;\n}\n\nexport function publishRealtimeEvent(event: RealtimeEvent): void {\n  globalThis.__NETSO_REALTIME_PUBLISH__?.(event);\n}\n",
+      "path": "",
+      "data": {
+        "command": "type src\\lib\\server\\realtime.ts",
+        "output": "import 'server-only';\n\nexport type RealtimeTopic = 'orders' | 'payments' | 'messages' | 'services';\n\nexport interface RealtimeEvent {\n  topic: RealtimeTopic;\n  orderId?: string;\n  targetUserIds?: string[];\n  targetRoles?: string[];\n  notification?: {\n    text: string;\n    category: 'Order' | 'Payment' | 'Message' | 'Service';\n  };\n}\n\ndeclare global {\n  var __NETSO_REALTIME_PUBLISH__: ((event: RealtimeEvent) => void) | undefined;\n}\n\nexport function publishRealtimeEvent(event: RealtimeEvent): void {\n  globalThis.__NETSO_REALTIME_PUBLISH__?.(event);\n}\n",
+        "exitCode": 0,
+        "duration": 40,
+        "success": true
+      }
+    }
+  ],
+  "filesAffected": [],
+  "metadataUsed": {
+    "terminal_command": [
+      {}
+    ]
+  },
+  "terminalCommands": [],
+  "revertCommands": []
+}

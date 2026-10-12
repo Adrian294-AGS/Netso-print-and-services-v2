@@ -83,18 +83,20 @@ export interface CustomerRecord {
 }
 
 export interface PaymentTransaction {
+  paymentId: string;
   id: string;
   requestId: string;
   customerName: string;
   customerPhone: string;
   amount: number;
   paymentType: 'Full Payment' | '50% Down Payment' | 'Balance Settlement';
-  method: 'GCash' | 'Cash on Pickup';
+  method: 'GCash' | 'GCash QR' | 'Cash on Pickup';
   gcashRefNo: string;
   paymongoId: string;
   date: string;
   time: string;
-  status: 'Verified' | 'Pending Review' | 'Flagged';
+  status: 'Verified' | 'Pending' | 'Pending Review' | 'Flagged' | 'Failed' | 'Refunded';
+  provider?: string | null;
 }
 
 export interface ChatMessage {

@@ -8,9 +8,15 @@ interface StatusBadgeProps {
 }
 
 export function StatusBadge({ status, unpaidAmount = 0, className = '' }: StatusBadgeProps) {
-  const isAlert =
-    unpaidAmount > 0 || status === 'Unpaid Balance' || status === 'Flagged' || status === 'UNREAD';
-  const isWarning = status === 'In Pre-Press' || status === 'Pending Review';
+  const isAlert = status === 'Flagged' || status === 'UNREAD';
+  const isWarning =
+    unpaidAmount > 0 || status === 'In Pre-Press' || status === 'Pending Review';
+  const displayStatus =
+    status === 'Unpaid Balance'
+      ? unpaidAmount === 0
+        ? 'Paid — Awaiting Confirmation'
+        : 'Awaiting Payment'
+      : status;
 
   const badgeStyle = isAlert
     ? 'bg-red-100 text-red-800 border-red-300'
@@ -22,7 +28,7 @@ export function StatusBadge({ status, unpaidAmount = 0, className = '' }: Status
     <span
       className={`px-3 py-1 text-xs sm:text-sm font-extrabold rounded-full border inline-flex items-center gap-1.5 shrink-0 ${badgeStyle} ${className}`}
     >
-      {status}
+      {displayStatus}
     </span>
   );
 }

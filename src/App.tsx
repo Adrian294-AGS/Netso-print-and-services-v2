@@ -277,18 +277,25 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
       });
     } catch (error) {
       console.error('Unable to update order status:', error);
+      window.alert(
+        error instanceof Error ? error.message : 'Unable to update the order status.',
+      );
     }
   };
 
-  const handleVerifyPayment = async (orderId: string) => {
+  const handleReviewPayment = async (
+    paymentId: string,
+    status: 'verified' | 'flagged',
+  ) => {
     try {
       await apiRequest('/api/payments', {
         method: 'PATCH',
-        body: JSON.stringify({ orderId, status: 'verified' }),
+        body: JSON.stringify({ paymentId, status }),
       });
       await Promise.all([refreshOrders(), refreshPayments()]);
     } catch (error) {
-      console.error('Unable to review payment:', error);
+      console.error('Unable to review payment transaction:', error);
+      window.alert(error instanceof Error ? error.message : 'Unable to review this payment.');
     }
   };
 
@@ -308,9 +315,10 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
           method: 'Cash on Pickup',
         }),
       });
-      await refreshPayments();
+      await Promise.all([refreshOrders(), refreshPayments()]);
     } catch (error) {
       console.error('Unable to record payment:', error);
+      window.alert(error instanceof Error ? error.message : 'Unable to record this payment.');
     }
   };
 
@@ -425,7 +433,7 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
         setNotifications={setNotifications}
         initialTab={adminTab || 'dashboard'}
         onUpdateOrderStatus={handleUpdateOrderStatus}
-        onVerifyPayment={handleVerifyPayment}
+        onReviewPayment={handleReviewPayment}
         onRecordPayment={handleRecordPayment}
         onSendAdminReply={handleSendAdminReply}
         onCreateWalkInOrder={handleCreateWalkInOrder}

@@ -27,7 +27,7 @@ interface AdminPaymentsTabProps {
   requests: RequestOrder[];
   payments: PaymentTransaction[];
   onSelectOrder: (order: RequestOrder) => void;
-  onVerifyPayment: (orderId: string) => void;
+  onReviewPayment: (paymentId: string, status: 'verified' | 'flagged') => void;
   onRecordPayment: (orderId: string, amount: number) => void;
   highContrastMode: boolean;
   fontSizeLevel: FontSizeLevel;
@@ -37,7 +37,7 @@ export function AdminPaymentsTab({
   requests,
   payments,
   onSelectOrder,
-  onVerifyPayment,
+  onReviewPayment,
   onRecordPayment,
   highContrastMode,
   fontSizeLevel,
@@ -45,17 +45,34 @@ export function AdminPaymentsTab({
   const [filterMode, setFilterMode] = useState<'all' | 'unpaid' | 'partial' | 'paid'>('all');
 
   const totalCollected = useMemo(
-    () => requests.reduce((sum, r) => sum + r.paidAmount, 0),
-    [requests]
+    () =>
+      payments
+        .filter((payment) => payment.status === 'Verified')
+        .reduce((sum, payment) => sum + payment.amount, 0),
+    [payments],
   );
   const totalOutstanding = useMemo(
     () => requests.reduce((sum, r) => sum + r.unpaidAmount, 0),
     [requests]
   );
   const flaggedCount = useMemo(
-    () => requests.filter((r) => !r.paymentVerified && r.paidAmount > 0).length,
-    [requests]
+    () => payments.filter((payment) => payment.status === 'Flagged').length,
+    [payments]
   );
+  const pendingAmountsByOrder = useMemo(() => {
+    const amounts = new Map<string, number>();
+    for (const payment of payments) {
+      if (payment.status !== 'Pending Review' && payment.status !== 'Pending') continue;
+      amounts.set(payment.requestId, (amounts.get(payment.requestId) ?? 0) + payment.amount);
+    }
+    return amounts;
+  }, [payments]);
+  const availableToRecord = (order: RequestOrder) =>
+    Math.max(
+      0,
+      Math.round(order.unpaidAmount * 100) -
+        Math.round((pendingAmountsByOrder.get(order.id) ?? 0) * 100),
+    ) / 100;
 
   const filteredRequests = useMemo(() => {
     return requests.filter((r) => {
@@ -81,14 +98,14 @@ export function AdminPaymentsTab({
                 : 'text-xl sm:text-2xl'
             }`}
           >
-            Payments & GCash Transactions
+            Payments & Transactions
           </h1>
           <p
             className={`font-medium mt-0.5 ${
               highContrastMode ? 'text-zinc-300' : 'text-zinc-600'
             } ${fontSizeLevel === 'xlarge' ? 'text-base' : 'text-xs sm:text-sm'}`}
           >
-            Monitor customer balances, verify 50% GCash down payments, and audit Paymongo transaction logs.
+            Track verified payments, review manually recorded transactions, and monitor order balances.
           </p>
         </div>
       </div>
@@ -104,9 +121,9 @@ export function AdminPaymentsTab({
             TOTAL COLLECTED
           </span>
           <span className="font-mono font-black text-xl sm:text-2xl text-emerald-700 dark:text-emerald-400 block mt-1">
-            ₱{(46087 + totalCollected).toLocaleString()}
+            ₱{totalCollected.toLocaleString()}
           </span>
-          <span className="text-[11px] font-bold text-emerald-700">✓ Settled via GCash</span>
+          <span className="text-[11px] font-bold text-emerald-700">Verified transactions</span>
         </div>
 
         <div
@@ -129,12 +146,12 @@ export function AdminPaymentsTab({
           }`}
         >
           <span className="text-[10px] sm:text-[11px] font-extrabold uppercase text-zinc-500 block">
-            GCASH TXNS
+            PAYMENT TXNS
           </span>
           <span className="font-mono font-black text-xl sm:text-2xl block mt-1">
-            {110 + payments.length}
+            {payments.length}
           </span>
-          <span className="text-[11px] font-semibold text-zinc-500">0961-775-1907 (R*****o Jr. C.)</span>
+          <span className="text-[11px] font-semibold text-zinc-500">All recorded transactions</span>
         </div>
 
         <div
@@ -143,12 +160,12 @@ export function AdminPaymentsTab({
           }`}
         >
           <span className="text-[10px] sm:text-[11px] font-extrabold uppercase text-amber-700 block">
-            FLAGGED FOR REVIEW
+            FLAGGED TRANSACTIONS
           </span>
           <span className="font-mono font-black text-xl sm:text-2xl text-[#B8860B] block mt-1">
             {flaggedCount}
           </span>
-          <span className="text-[11px] font-semibold text-zinc-500">Awaiting ref verification</span>
+          <span className="text-[11px] font-semibold text-zinc-500">Requires follow-up</span>
         </div>
       </div>
 
@@ -156,10 +173,10 @@ export function AdminPaymentsTab({
       <div className="p-3.5 rounded-xl border-l-4 border-l-[#D4A017] border border-amber-300 bg-amber-50/90 text-zinc-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
         <div className="text-xs">
           <strong className="font-extrabold uppercase tracking-wide text-[#B8860B] block">
-            ⚠ NETSO Policy: Payment First (GCash 0961-775-1907)
+            Payment and order progress are separate
           </strong>
           <span className="font-medium text-zinc-700">
-            At least 50% down payment is required before printing begins. Remaining balance must be settled via GCash before customer pickup.
+            Only verified transactions count toward the paid total. PayMongo confirms automatically; staff review each manually recorded payment below. Full payment is required before order confirmation.
           </span>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
@@ -199,6 +216,7 @@ export function AdminPaymentsTab({
                 <th className="py-3 px-3.5">Service</th>
                 <th className="py-3 px-3.5">Total Amount</th>
                 <th className="py-3 px-3.5">Amount Paid</th>
+                <th className="py-3 px-3.5">Pending</th>
                 <th className="py-3 px-3.5">Balance Due</th>
                 <th className="py-3 px-3.5">Status</th>
                 <th className="py-3 px-3.5 text-right">Actions</th>
@@ -215,7 +233,10 @@ export function AdminPaymentsTab({
                   <td className="py-3 px-3.5 font-medium">{req.service}</td>
                   <td className="py-3 px-3.5 font-mono font-bold">₱{req.amount}</td>
                   <td className="py-3 px-3.5 font-mono font-bold text-emerald-700">
-                    ₱{req.paidAmount} {req.paidAmount > 0 && req.unpaidAmount > 0 ? '(50% down)' : ''}
+                    ₱{req.paidAmount} {req.paidAmount > 0 && req.unpaidAmount > 0 ? '(partial)' : ''}
+                  </td>
+                  <td className="py-3 px-3.5 font-mono font-bold text-amber-700">
+                    ₱{pendingAmountsByOrder.get(req.id) ?? 0}
                   </td>
                   <td
                     className={`py-3 px-3.5 font-mono font-black ${
@@ -240,22 +261,13 @@ export function AdminPaymentsTab({
                     )}
                   </td>
                   <td className="py-3 px-3.5 text-right space-x-1.5 whitespace-nowrap">
-                    {!req.paymentVerified && req.paidAmount > 0 && (
+                    {availableToRecord(req) > 0 && (
                       <button
                         type="button"
-                        onClick={() => onVerifyPayment(req.id)}
-                        className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] rounded-lg cursor-pointer"
-                      >
-                        Verify Ref
-                      </button>
-                    )}
-                    {req.unpaidAmount > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => onRecordPayment(req.id, req.unpaidAmount)}
+                        onClick={() => onRecordPayment(req.id, availableToRecord(req))}
                         className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[11px] rounded-lg cursor-pointer"
                       >
-                        Settle ₱{req.unpaidAmount}
+                        Submit ₱{availableToRecord(req)}
                       </button>
                     )}
                     <button
@@ -283,7 +295,7 @@ export function AdminPaymentsTab({
             >
               <div className="flex justify-between items-center">
                 <span className="font-mono font-black text-xs text-[#B8860B]">{req.id}</span>
-                <span className="font-mono font-black text-xs text-red-600">
+                <span className={`font-mono font-black text-xs ${req.unpaidAmount > 0 ? 'text-red-600' : 'text-emerald-700'}`}>
                   Balance: ₱{req.unpaidAmount}
                 </span>
               </div>
@@ -293,14 +305,19 @@ export function AdminPaymentsTab({
                   Paid ₱{req.paidAmount} / ₱{req.amount}
                 </span>
               </div>
+              {(pendingAmountsByOrder.get(req.id) ?? 0) > 0 && (
+                <div className="text-xs font-bold text-amber-700">
+                  Pending review: ₱{pendingAmountsByOrder.get(req.id)}
+                </div>
+              )}
               <div className="flex gap-2 pt-1">
-                {req.unpaidAmount > 0 && (
+                {availableToRecord(req) > 0 && (
                   <button
                     type="button"
-                    onClick={() => onRecordPayment(req.id, req.unpaidAmount)}
+                    onClick={() => onRecordPayment(req.id, availableToRecord(req))}
                     className="flex-1 py-1.5 bg-blue-600 text-white font-extrabold text-xs rounded-lg"
                   >
-                    Settle ₱{req.unpaidAmount}
+                    Submit ₱{availableToRecord(req)}
                   </button>
                 )}
                 <button
@@ -319,10 +336,68 @@ export function AdminPaymentsTab({
       {/* Transaction Log */}
       <div className="space-y-2 pt-2">
         <h2 className="text-xs sm:text-sm font-extrabold uppercase tracking-wider">
-          GCash Transaction Log (tbl_payments)
+          Payment Transaction Log (tbl_payments)
         </h2>
+        <div className="md:hidden space-y-2">
+          {payments.map((txn) => (
+            <div
+              key={txn.id}
+              className={`rounded-xl border p-3 space-y-2 ${
+                highContrastMode ? 'bg-zinc-900 border-zinc-700 text-white' : 'bg-white border-zinc-300 text-zinc-900'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <span className="block font-mono font-black text-[#B8860B]">{txn.requestId}</span>
+                  <span className="block text-xs font-bold truncate">{txn.customerName}</span>
+                </div>
+                <span className="shrink-0 font-mono font-black text-emerald-700">₱{txn.amount}</span>
+              </div>
+              <div className="text-xs text-zinc-500">
+                {txn.date} · {txn.time} · {txn.method}
+              </div>
+              <div className="text-xs break-all">
+                Reference: {txn.paymongoId || txn.gcashRefNo || txn.id}
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-extrabold">
+                  {txn.status === 'Pending'
+                    ? 'Waiting for PayMongo'
+                    : txn.status === 'Pending Review'
+                      ? 'Pending Review'
+                      : txn.status}
+                </span>
+                {txn.status === 'Pending Review' ? (
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => onReviewPayment(txn.paymentId, 'verified')}
+                      className="px-2.5 py-1 bg-emerald-600 text-white font-extrabold text-[11px] rounded-lg"
+                    >
+                      Verify
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onReviewPayment(txn.paymentId, 'flagged')}
+                      className="px-2.5 py-1 bg-red-600 text-white font-extrabold text-[11px] rounded-lg"
+                    >
+                      Flag
+                    </button>
+                  </div>
+                ) : txn.status === 'Pending' ? (
+                  <span className="text-xs text-zinc-500">Automatic</span>
+                ) : null}
+              </div>
+            </div>
+          ))}
+          {payments.length === 0 && (
+            <div className="rounded-xl border border-zinc-300 bg-white px-3.5 py-6 text-center text-sm text-zinc-500">
+              No payment transactions have been recorded yet.
+            </div>
+          )}
+        </div>
         <div
-          className={`rounded-2xl border overflow-x-auto shadow-xs ${
+          className={`hidden md:block rounded-2xl border overflow-x-auto shadow-xs ${
             highContrastMode ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-zinc-300'
           }`}
         >
@@ -333,8 +408,9 @@ export function AdminPaymentsTab({
                 <th className="py-2.5 px-3.5">Request</th>
                 <th className="py-2.5 px-3.5">Customer</th>
                 <th className="py-2.5 px-3.5">Amount</th>
-                <th className="py-2.5 px-3.5">GCash Ref / Paymongo ID</th>
+                <th className="py-2.5 px-3.5">Method / Reference</th>
                 <th className="py-2.5 px-3.5 text-right">Status</th>
+                <th className="py-2.5 px-3.5 text-right">Review</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
@@ -349,23 +425,65 @@ export function AdminPaymentsTab({
                   <td className="py-2.5 px-3.5 font-mono font-black text-[#B8860B]">{txn.requestId}</td>
                   <td className="py-2.5 px-3.5 font-bold">{txn.customerName}</td>
                   <td className="py-2.5 px-3.5 font-mono font-black text-emerald-700">₱{txn.amount}</td>
-                  <td className="py-2.5 px-3.5 font-mono text-[11px]">
-                    <span className="font-bold block">{txn.gcashRefNo}</span>
-                    <span className="text-zinc-500">{txn.paymongoId}</span>
+                  <td className="py-2.5 px-3.5 text-[11px]">
+                    <span className="font-bold block">{txn.method}</span>
+                    <span className="text-zinc-500">
+                      {txn.paymongoId || txn.gcashRefNo || txn.id}
+                    </span>
                   </td>
-                  <td className="py-2.5 px-3.5 text-right">
+                  <td className="py-2.5 px-3.5 text-right whitespace-nowrap">
                     <span
                       className={`px-2 py-0.5 rounded-full text-[11px] font-extrabold border ${
                         txn.status === 'Verified'
                           ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                          : 'bg-amber-100 text-amber-900 border-amber-300'
+                          : txn.status === 'Pending' || txn.status === 'Pending Review'
+                            ? 'bg-amber-100 text-amber-900 border-amber-300'
+                            : txn.status === 'Flagged'
+                              ? 'bg-red-100 text-red-800 border-red-300'
+                              : 'bg-zinc-100 text-zinc-800 border-zinc-300'
                       }`}
                     >
-                      {txn.status === 'Verified' ? '✓ Paid & Verified' : '⏳ Pending Review'}
+                      {txn.status === 'Verified'
+                        ? '✓ Paid & Verified'
+                        : txn.status === 'Pending'
+                          ? 'Waiting for PayMongo'
+                        : txn.status === 'Pending Review'
+                          ? '⏳ Pending Review'
+                          : txn.status}
                     </span>
+                  </td>
+                  <td className="py-2.5 px-3.5 text-right whitespace-nowrap">
+                    {txn.status === 'Pending Review' && (
+                      <div className="flex justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => onReviewPayment(txn.paymentId, 'verified')}
+                          className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] rounded-lg"
+                        >
+                          Verify
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onReviewPayment(txn.paymentId, 'flagged')}
+                          className="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white font-extrabold text-[11px] rounded-lg"
+                        >
+                          Flag
+                        </button>
+                      </div>
+                    )}
+                    {txn.status === 'Pending' && (
+                      <span className="text-zinc-500">Automatic</span>
+                    )}
                   </td>
                 </tr>
               ))}
+              {payments.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-3.5 py-6 text-center text-zinc-500">
+                    No payment transactions have been recorded yet.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

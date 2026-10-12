@@ -1,0 +1,4 @@
+This directory is managed by Brud Code.
+It contains workspace history, session snapshots, and revert data.
+Do not modify or delete this directory manually.
+Brud Code uses this data to provide revert functionality and session history.

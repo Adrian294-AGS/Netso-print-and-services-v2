@@ -79,6 +79,15 @@ export function getJwtSecret(): string {
 }
 
 export function getGoogleOAuthEnv() {
+  const appUrl = getAppUrl();
+  return {
+    googleClientId: required('GOOGLE_CLIENT_ID'),
+    googleClientSecret: required('GOOGLE_CLIENT_SECRET'),
+    appUrl,
+  };
+}
+
+function getAppUrl(): string {
   const appUrl = required('APP_URL').replace(/\/+$/, '');
   let parsedAppUrl: URL;
   try {
@@ -93,11 +102,18 @@ export function getGoogleOAuthEnv() {
     throw new Error('APP_URL must use HTTPS in production');
   }
 
+  return appUrl;
+}
+
+export function getPayMongoEnv() {
   return {
-    googleClientId: required('GOOGLE_CLIENT_ID'),
-    googleClientSecret: required('GOOGLE_CLIENT_SECRET'),
-    appUrl,
+    secretKey: required('PAYMONGO_SECRET_KEY'),
+    appUrl: getAppUrl(),
   };
+}
+
+export function getPayMongoWebhookSecret(): string {
+  return required('PAYMONGO_WEBHOOK_SECRET');
 }
 
 export function getB2Env() {

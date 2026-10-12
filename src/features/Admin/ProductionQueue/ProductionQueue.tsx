@@ -35,8 +35,8 @@ export function ProductionQueue({
     nextLabel: string;
   }[] = [
     {
-      title: '1. Pending / Unpaid',
-      subtitle: 'Awaiting 50% GCash Deposit',
+      title: '1. Awaiting Payment',
+      subtitle: 'Full payment required before confirmation',
       status: 'Unpaid Balance',
       nextStatus: 'In Pre-Press',
       nextStage: 2,
@@ -173,10 +173,16 @@ export function ProductionQueue({
                       </button>
                       <button
                         type="button"
+                        disabled={col.nextStatus === 'In Pre-Press' && req.unpaidAmount > 0}
+                        title={
+                          col.nextStatus === 'In Pre-Press' && req.unpaidAmount > 0
+                            ? 'Verify the full payment before confirming this order.'
+                            : undefined
+                        }
                         onClick={() =>
                           onUpdateOrderStatus(req.id, col.nextStatus, col.nextStage)
                         }
-                        className="flex-1 py-1.5 px-2.5 bg-[#D4A017] hover:bg-[#B8860B] text-black font-extrabold text-[11px] rounded-lg border border-black flex items-center justify-center gap-1 cursor-pointer"
+                        className="flex-1 py-1.5 px-2.5 bg-[#D4A017] hover:bg-[#B8860B] text-black font-extrabold text-[11px] rounded-lg border border-black flex items-center justify-center gap-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         <span>{col.nextLabel}</span>
                         <ArrowRight className="w-3 h-3" />
