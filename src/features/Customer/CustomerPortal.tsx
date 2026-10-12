@@ -28,9 +28,7 @@ import {
   Lock,
   ShieldCheck,
   Paperclip,
-  Phone,
   ArrowRight,
-  RefreshCw,
   Receipt,
   Download,
 } from 'lucide-react';
@@ -410,16 +408,13 @@ export function CustomerPortal({
   const [requestFiles, setRequestFiles] = useState<UploadedFile[]>([]);
   const [requestNotes, setRequestNotes] = useState<string>('');
 
-  // Manual GCash reference submission state
+  // PayMongo-hosted GCash checkout state
   const [isGCashPaymentOpen, setIsGCashPaymentOpen] = useState(false);
   const [targetOrderForPayment, setTargetOrderForPayment] = useState<RequestOrder | null>(null);
   const [paymentStep, setPaymentStep] = useState<
-    'upload' | 'select' | 'redirecting' | 'processing' | 'success'
+    'upload' | 'select' | 'redirecting'
   >('select');
   const [paymentAmountType, setPaymentAmountType] = useState<'full' | 'downpayment'>('full');
-  const [gcashReference, setGcashReference] = useState('');
-  const [lastTxnRef, setLastTxnRef] = useState('');
-  const [lastPaidAmount, setLastPaidAmount] = useState<number>(0);
 
   const [messageState, setMessageState] = useState<{
     orderId: string;
@@ -664,60 +659,45 @@ export function CustomerPortal({
     setTargetOrderForPayment((prev) => (prev && prev.id === orderId ? { ...prev, files } : prev));
   };
 
-  /*
-   * FIXED: GCash payment handler.
-   *
-   * The old version called setTargetOrderForPayment() from inside the
-   * function passed to setRequests(). Because `requests` state lives in App,
-   * React runs that updater while rendering App, so updating
-   * CustomerPortal from inside it threw:
-   *   "Cannot update a component (CustomerPortal) while rendering a
-   *    different component (App)".
-   *
-   * Now the updated order is computed first, and every state setter is
-   * called separately, outside of any updater function.
-   */
   const handleProceedToGCash = async () => {
     if (!targetOrderForPayment) return;
 
     const orderId = targetOrderForPayment.id;
-    const baseUnpaid =
-      targetOrderForPayment.unpaidAmount > 0
-        ? targetOrderForPayment.unpaidAmount
-        : targetOrderForPayment.amount;
-    const payAmount = paymentAmountType === 'full' ? baseUnpaid : Math.ceil(baseUnpaid / 2);
-
-    if (payAmount <= 0) return;
-
-    if (!gcashReference.trim()) {
-      window.alert('Enter the GCash reference number after completing payment in GCash.');
-      return;
-    }
+    setPaymentStep('redirecting');
     try {
-      const response = await fetch('/api/payments', {
+      const response = await fetch('/api/payments/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           requestId: orderId,
-          amount: payAmount,
           paymentType: paymentAmountType === 'full' ? 'Full Payment' : '50% Down Payment',
-          method: 'GCash',
-          gcashRefNo: gcashReference.trim(),
         }),
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Unable to submit payment for review.');
-      setLastPaidAmount(payAmount);
-      setLastTxnRef(gcashReference.trim());
-      setPaymentStep('success');
-      const ordersResponse = await fetch('/api/orders');
-      const ordersResult = await ordersResponse.json();
-      if (ordersResponse.ok && Array.isArray(ordersResult.orders)) {
-        setRequests(ordersResult.orders);
+      if (!response.ok) throw new Error(result.error || 'Unable to start GCash checkout.');
+      if (typeof result.checkoutUrl !== 'string') {
+        throw new Error('PayMongo did not return a checkout link. Please try again.');
       }
+      const selectedPaymentType =
+        paymentAmountType === 'full' ? 'Full Payment' : '50% Down Payment';
+      if (
+        result.reused &&
+        result.payment &&
+        result.payment.paymentType !== selectedPaymentType &&
+        !window.confirm(
+          `An existing ${result.payment.paymentType} checkout for ₱${Number(
+            result.payment.amount,
+          ).toLocaleString()} is still open. Continue with that checkout?`,
+        )
+      ) {
+        setPaymentStep('select');
+        return;
+      }
+      window.location.assign(result.checkoutUrl);
     } catch (error) {
-      console.error('Unable to submit payment reference:', error);
-      window.alert(error instanceof Error ? error.message : 'Unable to submit payment reference.');
+      console.error('Unable to start PayMongo GCash checkout:', error);
+      setPaymentStep('select');
+      window.alert(error instanceof Error ? error.message : 'Unable to start GCash checkout.');
     }
   };
 
@@ -1403,7 +1383,7 @@ export function CustomerPortal({
                   className="w-full sm:w-auto min-w-48 px-3 py-2 rounded-lg border border-zinc-300 bg-white text-zinc-900 font-semibold text-sm focus:outline-none focus:ring-2 focus:ring-[#D4A017]"
                 >
                   <option value="All">All statuses</option>
-                  <option value="Unpaid Balance">Unpaid Balance</option>
+                  <option value="Unpaid Balance">Awaiting Payment</option>
                   <option value="In Pre-Press">In Pre-Press</option>
                   <option value="In Production">In Production</option>
                   <option value="Ready for Pickup">Ready for Pickup</option>
@@ -1426,14 +1406,26 @@ export function CustomerPortal({
                     <span className="font-mono font-black text-sm bg-amber-100 px-3 py-1 border border-[#D4A017] rounded-lg">
                       {req.id}
                     </span>
-                    <span className="font-extrabold text-xs sm:text-sm px-3 py-1 rounded-full border bg-amber-50 border-amber-300">
-                      {req.status}
+                    <span className={`font-extrabold text-xs sm:text-sm px-3 py-1 rounded-full border ${
+                      req.status === 'Unpaid Balance' && req.unpaidAmount === 0
+                        ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                        : req.status === 'Unpaid Balance'
+                          ? 'bg-amber-50 border-amber-300'
+                          : 'bg-amber-50 border-amber-300'
+                    }`}>
+                      {req.status === 'Unpaid Balance'
+                        ? req.unpaidAmount === 0
+                          ? 'Paid — Awaiting Confirmation'
+                          : 'Awaiting Payment'
+                        : req.status}
                     </span>
                   </div>
                   <div className="font-extrabold text-base sm:text-lg">{req.service}</div>
                   <div className="text-sm font-mono">
                     Total: ₱{req.amount} · Paid: ₱{req.paidAmount} · Unpaid:{' '}
-                    <strong className="text-red-600">₱{req.unpaidAmount}</strong>
+                    <strong className={req.unpaidAmount > 0 ? 'text-red-600' : 'text-emerald-700'}>
+                      ₱{req.unpaidAmount}
+                    </strong>
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                     <span className="text-xs sm:text-sm text-zinc-500">{req.notes}</span>
@@ -1915,7 +1907,7 @@ export function CustomerPortal({
               </div>
             )}
 
-            {/* Step 2: Select Payment Option & GCash Number */}
+            {/* Step 2: Select Payment Option */}
             {paymentStep === 'select' && (
               <div className="space-y-4">
                 <div className="bg-[#0B1D3A] border border-blue-500/50 rounded-xl p-4 space-y-1">
@@ -1982,106 +1974,30 @@ export function CustomerPortal({
                   </div>
                 </div>
 
-                <div>
-                  <label className="font-extrabold text-xs sm:text-sm text-white block mb-1.5">
-                    GCash Transaction Reference Number
-                  </label>
-                  <div className="relative">
-                    <Phone className="w-4 h-4 text-zinc-400 absolute left-3.5 top-3.5" />
-                    <input
-                      type="text"
-                      value={gcashReference}
-                      onChange={(e) => setGcashReference(e.target.value)}
-                      placeholder="Enter reference from your GCash receipt"
-                      className="w-full bg-[#050C1A] border border-blue-600/80 rounded-xl pl-10 pr-4 py-2.5 font-mono font-bold text-sm sm:text-base text-yellow-400 focus:outline-none focus:ring-2 focus:ring-blue-400"
-                    />
-                  </div>
-                </div>
-
+                <p className="text-xs sm:text-sm text-blue-200">
+                  You will be redirected to PayMongo to securely complete your GCash payment.
+                </p>
                 <button
                   type="button"
                   onClick={handleProceedToGCash}
                   className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-extrabold uppercase rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm shadow-lg cursor-pointer transition-all"
                 >
-                  <span>SUBMIT REFERENCE FOR REVIEW</span>
+                  <span>CONTINUE TO GCASH CHECKOUT</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </div>
             )}
 
-            {/* Step 3: Redirecting / Processing */}
-            {(paymentStep === 'redirecting' || paymentStep === 'processing') && (
+            {/* Step 3: Redirecting to PayMongo */}
+            {paymentStep === 'redirecting' && (
               <div className="py-8 text-center space-y-3">
-                {paymentStep === 'redirecting' ? (
-                  <>
-                    <Loader2 className="w-10 h-10 animate-spin mx-auto text-blue-400" />
-                    <h4 className="font-extrabold text-base sm:text-lg text-white">
-                      Connecting to GCash Secure Gateway...
-                    </h4>
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="w-10 h-10 animate-spin mx-auto text-yellow-400" />
-                    <h4 className="font-extrabold text-base sm:text-lg text-white">
-                      Verifying GCash Payment Reference...
-                    </h4>
-                  </>
-                )}
+                <Loader2 className="w-10 h-10 animate-spin mx-auto text-blue-400" />
+                <h4 className="font-extrabold text-base sm:text-lg text-white">
+                  Opening secure PayMongo GCash checkout...
+                </h4>
               </div>
             )}
 
-            {/* Step 4: Payment Successful */}
-            {paymentStep === 'success' && (
-              <div className="space-y-4 text-center pt-2">
-                <div className="flex items-center justify-center gap-2.5">
-                  <img
-                    src="/logo/netso-logo.jpg"
-                    alt="NETSO Prints & Ads Logo"
-                    className="w-14 h-14 rounded-2xl object-contain border border-[#D4A017]/60 bg-[#0A0A0C] p-0.5 shadow-md"
-                  />
-                  <div className="w-14 h-14 rounded-full bg-emerald-500/15 border-2 border-emerald-400 text-emerald-400 flex items-center justify-center">
-                    <Check className="w-7 h-7" />
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="font-black text-xl sm:text-2xl text-white">Payment Submitted</h4>
-                  <p className="text-xs sm:text-sm text-blue-200 mt-1">
-                    Staff will verify your payment reference. Your order balance will update after approval.
-                  </p>
-                </div>
-
-                <div className="bg-[#050C1A] border border-blue-800/80 rounded-xl p-4 space-y-2.5 text-xs sm:text-sm text-left">
-                  <div className="flex items-center justify-between">
-                    <span className="text-zinc-300 font-medium">GCash Ref No:</span>
-                    <span className="font-mono font-bold text-yellow-400">{lastTxnRef}</span>
-                  </div>
-                  <div className="border-t border-blue-900/70 pt-2.5 flex items-center justify-between">
-                    <span className="text-zinc-300 font-medium">Order ID:</span>
-                    <span className="font-mono font-bold text-white">
-                      {targetOrderForPayment.id}
-                    </span>
-                  </div>
-                  <div className="border-t border-blue-900/70 pt-2.5 flex items-center justify-between">
-                    <span className="text-zinc-300 font-medium">Submitted Amount:</span>
-                    <span className="font-mono font-bold text-emerald-400">
-                      ₱{lastPaidAmount.toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsGCashPaymentOpen(false);
-                    setActiveTab('dashboard');
-                  }}
-                  className="w-full py-3.5 bg-[#D4A017] hover:bg-[#E6B222] text-black font-extrabold uppercase rounded-xl text-xs sm:text-sm shadow-md cursor-pointer transition-all"
-                >
-                  DONE &amp; RETURN TO DASHBOARD
-                </button>
-              </div>
-            )}
           </div>
         </div>
       )}

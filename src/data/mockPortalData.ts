@@ -159,6 +159,7 @@ export const INITIAL_CUSTOMERS: CustomerRecord[] = [
 
 export const INITIAL_PAYMENTS: PaymentTransaction[] = [
   {
+    paymentId: 'mock-TXN-8800',
     id: 'TXN-8800',
     requestId: 'NETSO-00131',
     customerName: 'Alexandrie Abon',
@@ -173,6 +174,7 @@ export const INITIAL_PAYMENTS: PaymentTransaction[] = [
     status: 'Verified',
   },
   {
+    paymentId: 'mock-TXN-8799',
     id: 'TXN-8799',
     requestId: 'NETSO-00125',
     customerName: 'Alexandrie Abon',
@@ -187,6 +189,7 @@ export const INITIAL_PAYMENTS: PaymentTransaction[] = [
     status: 'Verified',
   },
   {
+    paymentId: 'mock-TXN-8797',
     id: 'TXN-8797',
     requestId: 'NETSO-90103',
     customerName: 'Alexandrie Abon',

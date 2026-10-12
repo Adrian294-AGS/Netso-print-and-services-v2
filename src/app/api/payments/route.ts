@@ -17,8 +17,20 @@ const paymentSchema = z.object({
   gcashRefNo: z.string().trim().max(100).optional(),
 });
 
-const paymentStatus = (status: string) =>
-  status === 'verified' ? 'Verified' : status === 'flagged' ? 'Flagged' : 'Pending Review';
+const paymentStatus = (status: string, provider: string | null) => {
+  switch (status) {
+    case 'verified':
+      return 'Verified';
+    case 'flagged':
+      return 'Flagged';
+    case 'failed':
+      return 'Failed';
+    case 'refunded':
+      return 'Refunded';
+    default:
+      return provider === 'paymongo' ? 'Pending' : 'Pending Review';
+  }
+};
 
 export async function GET(request: NextRequest) {
   try {
@@ -27,6 +39,7 @@ export async function GET(request: NextRequest) {
     const values = isStaffRole(user.role) ? [] : [user.id];
     const rows = await queryRows<
       {
+        payment_id: string | number;
         transaction_number: string | null;
         order_number: string;
         customer_name: string;
@@ -39,12 +52,14 @@ export async function GET(request: NextRequest) {
         paid_at: Date | null;
         created_at: Date;
         status: string;
+        provider: string | null;
       } & import('mysql2/promise').RowDataPacket
     >(
       mysqlPool,
-      `SELECT p.transaction_number, o.order_number, o.customer_name, o.customer_phone,
+      `SELECT p.ID AS payment_id, p.transaction_number,
+              o.order_number, o.customer_name, o.customer_phone,
               p.amount, p.payment_type, p.method, p.external_reference,
-              p.provider_payment_id, p.paid_at, p.created_at, p.status
+              p.provider, p.provider_payment_id, p.paid_at, p.created_at, p.status
        FROM tbl_payments p
        JOIN tbl_print_order o ON o.ID = p.print_order_id
        WHERE 1 = 1 ${where}
@@ -52,7 +67,8 @@ export async function GET(request: NextRequest) {
       values,
     );
     const payments = rows.map((row) => ({
-      id: row.transaction_number ?? `PAY-${row.order_number}`,
+      paymentId: String(row.payment_id),
+      id: row.transaction_number ?? `PAY-${row.payment_id}`,
       requestId: row.order_number,
       customerName: row.customer_name,
       customerPhone: row.customer_phone ?? '',
@@ -66,12 +82,13 @@ export async function GET(request: NextRequest) {
       method: row.method,
       gcashRefNo: row.external_reference ?? '',
       paymongoId: row.provider_payment_id ?? '',
+      provider: row.provider,
       date: new Date(row.paid_at ?? row.created_at).toISOString().slice(0, 10),
       time: new Date(row.paid_at ?? row.created_at).toLocaleTimeString('en-PH', {
         hour: '2-digit',
         minute: '2-digit',
       }),
-      status: paymentStatus(row.status),
+      status: paymentStatus(row.status, row.provider),
     }));
     return NextResponse.json({ ok: true, payments, total: payments.length });
   } catch (error) {
@@ -112,7 +129,9 @@ export async function POST(request: NextRequest) {
        WHERE print_order_id = ? AND status = 'verified'`,
       [order.ID],
     );
-    const balance = Number(order.total_amount) - Number(paidRows[0]?.paid ?? 0);
+    const balanceCentavos =
+      Math.round(Number(order.total_amount) * 100) -
+      Math.round(Number(paidRows[0]?.paid ?? 0) * 100);
     const pendingRows = await queryRows<
       { pending: string | number } & import('mysql2/promise').RowDataPacket
     >(
@@ -121,9 +140,20 @@ export async function POST(request: NextRequest) {
        WHERE print_order_id = ? AND status = 'pending'`,
       [order.ID],
     );
-    const availableToSubmit = balance - Number(pendingRows[0]?.pending ?? 0);
-    if (payment.amount > availableToSubmit) {
-      throw new ApiError(400, 'Payment exceeds the balance not already submitted for review.');
+    const pendingCentavos = Math.round(Number(pendingRows[0]?.pending ?? 0) * 100);
+    const availableToSubmitCentavos = Math.max(0, balanceCentavos - pendingCentavos);
+    const requestedCentavos = Math.round(payment.amount * 100);
+    if (requestedCentavos > availableToSubmitCentavos) {
+      const pendingAmount = (pendingCentavos / 100).toLocaleString('en-PH', {
+        style: 'currency',
+        currency: 'PHP',
+      });
+      throw new ApiError(
+        409,
+        pendingCentavos > 0
+          ? `This order already has ${pendingAmount} in payments pending verification. Review or wait for those payments before recording another.`
+          : 'The payment amount exceeds the order balance.',
+      );
     }
 
     const paymentType =
@@ -187,109 +217,121 @@ export async function PATCH(request: NextRequest) {
     assertSameOrigin(request);
     const user = await requireSession(request, ['lead_admin', 'front_desk_cashier']);
     const body = await readJson(request);
-    const orderNumber = typeof body.orderId === 'string' ? body.orderId.trim() : '';
+    const paymentId = typeof body.paymentId === 'string' ? body.paymentId.trim() : '';
     const result = z.enum(['verified', 'flagged']).safeParse(body.status);
-    if (!orderNumber || !result.success) throw new ApiError(400, 'Payment review request is invalid.');
+    if (!/^\d+$/.test(paymentId) || !result.success) {
+      throw new ApiError(400, 'Payment review request is invalid.');
+    }
 
     await connection.beginTransaction();
-    const orders = await queryRows<{ ID: number; user_id: string | null } & import('mysql2/promise').RowDataPacket>(
-      connection,
-      'SELECT ID, user_id FROM tbl_print_order WHERE order_number = ? FOR UPDATE',
-      [orderNumber],
-    );
-    if (!orders[0]) throw new ApiError(404, 'Order not found.');
-    const payments = await queryRows<
-      { ID: number; amount: string | number } & import('mysql2/promise').RowDataPacket
+    const paymentRows = await queryRows<
+      {
+        payment_id: string | number;
+        print_order_id: number;
+        order_number: string;
+        user_id: string | null;
+        total_amount: string | number;
+        amount: string | number;
+        status: string;
+        provider: string | null;
+      } & import('mysql2/promise').RowDataPacket
     >(
       connection,
-      `SELECT ID, amount FROM tbl_payments
-       WHERE print_order_id = ? AND status = 'pending' ORDER BY created_at FOR UPDATE`,
-      [orders[0].ID],
+      `SELECT p.ID AS payment_id, p.print_order_id, p.amount, p.status, p.provider,
+              o.order_number, o.user_id, o.total_amount
+       FROM tbl_payments p
+       JOIN tbl_print_order o ON o.ID = p.print_order_id
+       WHERE p.ID = ? FOR UPDATE`,
+      [paymentId],
     );
-    if (!payments.length) throw new ApiError(404, 'No pending payments were found for this order.');
+    const payment = paymentRows[0];
+    if (!payment) throw new ApiError(404, 'Payment transaction not found.');
+    if (payment.status === 'verified') {
+      if (result.data !== 'verified') {
+        throw new ApiError(409, 'A verified payment cannot be flagged.');
+      }
+      await connection.commit();
+      return NextResponse.json({
+        ok: true,
+        paymentId,
+        orderId: payment.order_number,
+        status: 'verified',
+        alreadyReviewed: true,
+      });
+    }
+    if (payment.status !== 'pending') {
+      throw new ApiError(409, 'Only pending payment transactions can be reviewed.');
+    }
+    if (payment.provider === 'paymongo') {
+      throw new ApiError(409, 'PayMongo payments are confirmed automatically by the payment provider.');
+    }
 
+    let fullyPaid = false;
     if (result.data === 'verified') {
-      const totalRows = await queryRows<{ total: string | number } & import('mysql2/promise').RowDataPacket>(
-        connection,
-        'SELECT total_amount AS total FROM tbl_print_order WHERE ID = ?',
-        [orders[0].ID],
-      );
-      const paidRows = await queryRows<{ paid: string | number } & import('mysql2/promise').RowDataPacket>(
+      const verifiedRows = await queryRows<
+        { paid: string | number } & import('mysql2/promise').RowDataPacket
+      >(
         connection,
         `SELECT COALESCE(SUM(amount), 0) AS paid FROM tbl_payments
          WHERE print_order_id = ? AND status = 'verified'`,
-        [orders[0].ID],
+        [payment.print_order_id],
       );
-      const due = Number(totalRows[0]?.total ?? 0) - Number(paidRows[0]?.paid ?? 0);
-      const toVerify: number[] = [];
-      let remaining = due;
-      for (const payment of payments) {
-        if (Number(payment.amount) > remaining) continue;
-        toVerify.push(payment.ID);
-        remaining -= Number(payment.amount);
+      const otherPendingRows = await queryRows<
+        { pending: string | number } & import('mysql2/promise').RowDataPacket
+      >(
+        connection,
+        `SELECT COALESCE(SUM(amount), 0) AS pending FROM tbl_payments
+         WHERE print_order_id = ? AND status = 'pending'
+           AND provider = 'paymongo'`,
+        [payment.print_order_id],
+      );
+      const remainingCentavos =
+        Math.round(Number(payment.total_amount) * 100) -
+        Math.round(Number(verifiedRows[0]?.paid ?? 0) * 100) -
+        Math.round(Number(otherPendingRows[0]?.pending ?? 0) * 100);
+      const amountCentavos = Math.round(Number(payment.amount) * 100);
+      if (amountCentavos > remainingCentavos) {
+        throw new ApiError(409, 'This payment exceeds the remaining order balance and cannot be verified.');
       }
-      if (!toVerify.length) throw new ApiError(409, 'Pending payments exceed the remaining balance.');
-      const marks = toVerify.map(() => '?').join(', ');
       await connection.execute(
-        `UPDATE tbl_payments SET status = 'verified', verified_by = ?, paid_at = CURRENT_TIMESTAMP(3)
-         WHERE ID IN (${marks})`,
-        [user.id, ...toVerify],
+        `UPDATE tbl_payments
+         SET status = 'verified', verified_by = ?, paid_at = CURRENT_TIMESTAMP(3)
+         WHERE ID = ? AND status = 'pending' AND provider IS NULL`,
+        [user.id, payment.payment_id],
       );
-      const verifiedTotal = Number(paidRows[0]?.paid ?? 0) +
-        toVerify.reduce((sum, paymentId) => {
-          const payment = payments.find((candidate) => candidate.ID === paymentId);
-          return sum + Number(payment?.amount ?? 0);
-        }, 0);
-      if (verifiedTotal > 0) {
-        const currentRows = await queryRows<
-          { status: string; progress_stage: number } & import('mysql2/promise').RowDataPacket
-        >(
-          connection,
-          'SELECT status, progress_stage FROM tbl_print_order WHERE ID = ? FOR UPDATE',
-          [orders[0].ID],
-        );
-        const current = currentRows[0];
-        if (current?.status === 'Unpaid Balance') {
-          await connection.execute(
-            'UPDATE tbl_print_order SET status = ?, progress_stage = ? WHERE ID = ?',
-            ['In Pre-Press', Math.max(2, current.progress_stage), orders[0].ID],
-          );
-          await connection.execute(
-            `INSERT INTO tbl_print_order_status_history
-               (print_order_id, previous_status, new_status, note, changed_by)
-             VALUES (?, ?, ?, ?, ?)`,
-            [
-              orders[0].ID,
-              current.status,
-              'In Pre-Press',
-              'Payment verified by staff.',
-              user.id,
-            ],
-          );
-        }
-      }
+      fullyPaid =
+        Math.round(Number(verifiedRows[0]?.paid ?? 0) * 100) + amountCentavos >=
+        Math.round(Number(payment.total_amount) * 100);
     } else {
       await connection.execute(
         `UPDATE tbl_payments SET status = 'flagged', verified_by = ?
-         WHERE print_order_id = ? AND status = 'pending'`,
-        [user.id, orders[0].ID],
+         WHERE ID = ? AND status = 'pending' AND provider IS NULL`,
+        [user.id, payment.payment_id],
       );
     }
 
     await connection.commit();
     publishRealtimeEvent({
       topic: 'payments',
-      orderId: orderNumber,
-      targetUserIds: orders[0].user_id ? [orders[0].user_id] : [],
-      targetRoles: ['lead_admin', 'front_desk_cashier'],
+      orderId: payment.order_number,
+      targetUserIds: payment.user_id ? [payment.user_id] : [],
+      targetRoles: ['lead_admin', 'front_desk_cashier', 'print_operator', 'pre_press_artist'],
       notification: {
         category: 'Payment',
-        text: result.data === 'verified'
-          ? `Payment for request ${orderNumber} was verified.`
-          : `Payment for request ${orderNumber} needs review.`,
+        text:
+          result.data === 'verified' && fullyPaid
+            ? `Request ${payment.order_number} is fully paid and ready for staff confirmation.`
+            : result.data === 'verified'
+              ? `A payment for request ${payment.order_number} was verified; the remaining balance is still due.`
+              : `A payment for request ${payment.order_number} was flagged for review.`,
       },
     });
-    return NextResponse.json({ ok: true, orderId: orderNumber, status: result.data });
+    return NextResponse.json({
+      ok: true,
+      paymentId,
+      orderId: payment.order_number,
+      status: result.data,
+    });
   } catch (error) {
     await connection.rollback();
     return apiErrorResponse(error);

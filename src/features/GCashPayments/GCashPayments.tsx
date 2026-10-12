@@ -4,11 +4,8 @@ import React, { useState, useRef } from 'react';
 import {
   Wallet,
   X,
-  Phone,
   ArrowRight,
   Loader2,
-  RefreshCw,
-  Check,
   Upload,
   FileText,
   Trash2,
@@ -31,7 +28,6 @@ interface GCashPaymentsProps {
   order: RequestOrder | null;
   isOpen: boolean;
   onClose: () => void;
-  onPaymentComplete: (orderId: string, paidAmount: number, refNo: string) => void;
   onUpdateOrderFiles?: (orderId: string, files: UploadedFile[]) => void;
   fontSizeLevel?: FontSizeLevel;
 }
@@ -40,23 +36,18 @@ export function GCashPayments({
   order,
   isOpen,
   onClose,
-  onPaymentComplete,
   onUpdateOrderFiles,
 }: GCashPaymentsProps) {
-  const [step, setStep] = useState<'upload' | 'select' | 'redirecting' | 'processing' | 'success'>(
-    order && order.files.length === 0 ? 'upload' : 'select'
+  const [step, setStep] = useState<'upload' | 'select' | 'redirecting'>(
+    order && order.files.length === 0 ? 'upload' : 'select',
   );
   const [amountType, setAmountType] = useState<'full' | 'downpayment'>('full');
-  const [mobileNumber, setMobileNumber] = useState('09171234567');
-  const [txnRef, setTxnRef] = useState('');
-  const [lastPaid, setLastPaid] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen || !order) return null;
 
   const baseUnpaid = order.unpaidAmount > 0 ? order.unpaidAmount : order.amount;
-  const payAmount = amountType === 'full' ? baseUnpaid : Math.ceil(baseUnpaid / 2);
 
   const addFiles = (incoming: File[]) => {
     if (!onUpdateOrderFiles) return;
@@ -79,20 +70,43 @@ export function GCashPayments({
     }
   };
 
-  const handleAuthorize = () => {
-    setLastPaid(payAmount);
+  const handleAuthorize = async () => {
     setStep('redirecting');
-    setTimeout(() => {
-      setStep('processing');
-      setTimeout(() => {
-        const ref = `GC-${Math.floor(1000 + Math.random() * 8999)}-${Math.floor(
-          1000 + Math.random() * 8999
-        )}-${Math.floor(10 + Math.random() * 89)}`;
-        setTxnRef(ref);
-        onPaymentComplete(order.id, payAmount, ref);
-        setStep('success');
-      }, 900);
-    }, 800);
+    try {
+      const response = await fetch('/api/payments/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requestId: order.id,
+          paymentType: amountType === 'full' ? 'Full Payment' : '50% Down Payment',
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Unable to start GCash checkout.');
+      if (typeof result.checkoutUrl !== 'string') {
+        throw new Error('PayMongo did not return a checkout link. Please try again.');
+      }
+      const selectedPaymentType =
+        amountType === 'full' ? 'Full Payment' : '50% Down Payment';
+      if (
+        result.reused &&
+        result.payment &&
+        result.payment.paymentType !== selectedPaymentType &&
+        !window.confirm(
+          `An existing ${result.payment.paymentType} checkout for ₱${Number(
+            result.payment.amount,
+          ).toLocaleString()} is still open. Continue with that checkout?`,
+        )
+      ) {
+        setStep('select');
+        return;
+      }
+      window.location.assign(result.checkoutUrl);
+    } catch (error) {
+      console.error('Unable to start PayMongo GCash checkout:', error);
+      setStep('select');
+      window.alert(error instanceof Error ? error.message : 'Unable to start GCash checkout.');
+    }
   };
 
   return (
@@ -309,27 +323,15 @@ export function GCashPayments({
               </div>
             </div>
 
-            <div>
-              <label className="font-extrabold text-white block mb-1.5 text-xs sm:text-sm">
-                Registered GCash Mobile Number
-              </label>
-              <div className="relative">
-                <Phone className="w-4 h-4 text-zinc-400 absolute left-3.5 top-3.5" />
-                <input
-                  type="text"
-                  value={mobileNumber}
-                  onChange={(e) => setMobileNumber(e.target.value)}
-                  className="w-full bg-[#050C1A] border border-blue-600/80 pl-10 pr-4 py-2.5 rounded-xl font-mono text-sm sm:text-base text-yellow-400 font-bold focus:outline-none focus:ring-2 focus:ring-blue-400"
-                />
-              </div>
-            </div>
-
+            <p className="text-xs sm:text-sm text-blue-200">
+              You will be redirected to PayMongo to securely complete your GCash payment.
+            </p>
             <button
               type="button"
               onClick={handleAuthorize}
               className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-extrabold uppercase rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm shadow-lg cursor-pointer transition-all"
             >
-              <span>AUTHORIZE GCASH PAYMENT</span>
+              <span>CONTINUE TO GCASH CHECKOUT</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
@@ -338,61 +340,7 @@ export function GCashPayments({
         {step === 'redirecting' && (
           <div className="py-8 text-center space-y-3">
             <Loader2 className="w-10 h-10 text-blue-400 animate-spin mx-auto" />
-            <h4 className="font-extrabold text-base sm:text-lg">Opening GCash Gateway...</h4>
-          </div>
-        )}
-
-        {step === 'processing' && (
-          <div className="py-8 text-center space-y-3">
-            <RefreshCw className="w-10 h-10 text-yellow-400 animate-spin mx-auto" />
-            <h4 className="font-extrabold text-base sm:text-lg">Verifying Transaction...</h4>
-          </div>
-        )}
-
-        {step === 'success' && (
-          <div className="space-y-4 text-center pt-2">
-            <div className="flex items-center justify-center gap-2.5">
-              <img
-                src="/logo/netso-logo.jpg"
-                alt="NETSO Prints & Ads Logo"
-                className="w-14 h-14 rounded-2xl object-contain border border-[#D4A017]/60 bg-[#0A0A0C] p-0.5 shadow-md"
-              />
-              <div className="w-14 h-14 bg-emerald-500/15 text-emerald-400 border-2 border-emerald-400 rounded-full flex items-center justify-center">
-                <Check className="w-7 h-7" />
-              </div>
-            </div>
-            <div>
-              <h3 className="font-black text-xl sm:text-2xl text-white">Payment Successful!</h3>
-              <p className="text-xs sm:text-sm text-blue-200 mt-1">
-                Your GCash transaction with NETSO Prints &amp; Ads has been officially recorded.
-              </p>
-            </div>
-            <div className="bg-[#050C1A] border border-blue-800/80 rounded-xl p-4 space-y-2.5 text-xs sm:text-sm text-left">
-              <div className="flex items-center justify-between">
-                <span className="text-zinc-300 font-medium">GCash Ref No:</span>
-                <span className="font-mono font-bold text-yellow-400">{txnRef}</span>
-              </div>
-              <div className="border-t border-blue-900/70 pt-2.5 flex items-center justify-between">
-                <span className="text-zinc-300 font-medium">Order ID:</span>
-                <span className="font-mono font-bold text-white">{order.id}</span>
-              </div>
-              <div className="border-t border-blue-900/70 pt-2.5 flex items-center justify-between">
-                <span className="text-zinc-300 font-medium">Amount Paid:</span>
-                <span className="font-mono font-bold text-emerald-400">
-                  ₱{lastPaid.toLocaleString()}
-                </span>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setStep('select');
-                onClose();
-              }}
-              className="w-full py-3.5 bg-[#D4A017] hover:bg-[#E6B222] text-black font-extrabold uppercase rounded-xl text-xs sm:text-sm shadow-md cursor-pointer transition-all"
-            >
-              DONE &amp; RETURN TO DASHBOARD
-            </button>
+            <h4 className="font-extrabold text-base sm:text-lg">Opening PayMongo Checkout...</h4>
           </div>
         )}
       </div>

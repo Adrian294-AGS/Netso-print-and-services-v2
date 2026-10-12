@@ -128,11 +128,15 @@ If it asks for a password, use a **Personal Access Token** (not your GitHub pass
 ## Backend configuration and deployment
 
 The application uses MySQL for accounts, service catalog, orders, order files, and
-payment-review records; MongoDB for message threads, audit events, and rate limits;
-Google OAuth for customer sign-in; and a private Backblaze B2 bucket for uploaded
-artwork. GCash references and walk-in cash entries are **manual payments**: the
-application records them as pending until an authorized staff member reviews them.
-It does not charge a payment provider.
+payment records; MongoDB for message threads, audit events, and rate limits; Google
+OAuth for customer sign-in; and a private Backblaze B2 bucket for uploaded artwork.
+Customers pay online through PayMongo Hosted Checkout using GCash. A signed PayMongo
+webhook confirms successful payments; browser redirects alone never mark an order as
+paid. Walk-in cash and manually recorded GCash references remain pending until an
+authorized staff member reviews them. A verified partial payment is recorded against
+the balance but does not permit staff to confirm the order; the verified payments
+must cover the full order total first. Payment and order changes are then refreshed
+for the customer and relevant staff through realtime updates.
 
 ### Local setup
 
@@ -162,7 +166,16 @@ It does not charge a payment provider.
    origin, with the `Content-Type` and `x-amz-meta-order-number` request headers. Do
    not expose the bucket publicly; the app issues short-lived signed upload and
    download URLs.
-7. Register the first account through the app, then provision it as the first lead
+7. Create a PayMongo account and set its secret API key as `PAYMONGO_SECRET_KEY`.
+   In PayMongo's Developers/Webhooks settings, register
+   `https://your-domain/api/webhooks/paymongo` (or
+   `http://localhost:3000/api/webhooks/paymongo` for local forwarding) and subscribe
+   to `checkout_session.payment.paid`. Set that webhook's signing secret as
+   `PAYMONGO_WEBHOOK_SECRET`. Use test-mode credentials while developing, and enable
+   GCash for the PayMongo account before accepting live payments. After correcting a
+   webhook configuration or handler issue, retry its failed delivery from PayMongo;
+   a successfully processed event returns HTTP 200 and updates the payment ledger.
+8. Register the first account through the app, then provision it as the first lead
    administrator using an administrative database connection:
 
    ```sql
@@ -182,8 +195,8 @@ It does not charge a payment provider.
 ### Render deployment
 
 Set the Render build command to `npm run build` and start command to `npm run start`.
-Configure the same MySQL, MongoDB, Google OAuth, and B2 variables from `.env.example`
-as Render environment secrets. Set `APP_URL` to the final HTTPS origin and register
+Configure the MySQL, MongoDB, Google OAuth, B2, and PayMongo variables from
+`.env.example` as Render environment secrets. Set `APP_URL` to the final HTTPS origin and register
 `https://your-domain/api/auth/google/callback` as a Google OAuth redirect URI. Set
 `MYSQL_SSL=true` and `MONGODB_TLS=true`; production startup rejects disabled TLS,
 and the session cookie is Secure in production. Use managed database endpoints

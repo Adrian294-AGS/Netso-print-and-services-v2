@@ -46,7 +46,9 @@ export function OrderManagement({
         reqStatusFilter === 'All' ||
         (reqStatusFilter === 'Pending'
           ? r.status === 'Unpaid Balance' || r.status === 'In Pre-Press'
-          : r.status === reqStatusFilter);
+          : reqStatusFilter === 'Awaiting Payment'
+            ? r.status === 'Unpaid Balance'
+            : r.status === reqStatusFilter);
       const matchesSearch =
         !q ||
         r.id.toLowerCase().includes(q) ||
@@ -79,7 +81,7 @@ export function OrderManagement({
               highContrastMode ? 'text-zinc-300' : 'text-zinc-600'
             } ${fontSizeLevel === 'xlarge' ? 'text-base' : 'text-xs sm:text-sm'}`}
           >
-            Search, inspect uploaded files, update production status, and verify customer payments.
+            Search orders, inspect uploaded files, and update production status after payment is verified.
           </p>
         </div>
 
@@ -113,7 +115,7 @@ export function OrderManagement({
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
           {[
             'All',
-            'Unpaid Balance',
+            'Awaiting Payment',
             'In Pre-Press',
             'In Production',
             'Ready for Pickup',
@@ -194,17 +196,22 @@ export function OrderManagement({
                     </span>
                   ) : req.paidAmount > 0 ? (
                     <span className="text-amber-800 font-extrabold">
-                      ◐ 50% Down (Due ₱{req.unpaidAmount})
+                      ◐ Partial (Due ₱{req.unpaidAmount})
                     </span>
                   ) : (
                     <span className="text-red-600 font-extrabold">
-                      ! Pending (₱{req.unpaidAmount})
+                      ! Awaiting Payment (₱{req.unpaidAmount})
                     </span>
                   )}
                 </td>
                 <td className="py-3 px-3.5">
                   <select
                     value={req.status}
+                    title={
+                      req.progressStage === 1 && req.unpaidAmount > 0
+                        ? 'Verify the full payment before confirming this order.'
+                        : undefined
+                    }
                     onChange={(e) => {
                       const newSt = e.target.value as OrderStatus;
                       const stMap: Partial<Record<OrderStatus, number>> = {
@@ -218,11 +225,31 @@ export function OrderManagement({
                     }}
                     className="border border-zinc-300 dark:border-zinc-700 bg-amber-50/70 dark:bg-zinc-800 text-zinc-900 dark:text-white font-extrabold text-xs rounded-lg px-2 py-1 focus:outline-none focus:border-[#D4A017] cursor-pointer"
                   >
-                    <option value="Unpaid Balance">● Unpaid Balance</option>
-                    <option value="In Pre-Press">● In Pre-Press</option>
-                    <option value="In Production">● In Production</option>
-                    <option value="Ready for Pickup">✓ Ready for Pickup</option>
-                    <option value="Completed">✓ Completed</option>
+                    <option value="Unpaid Balance">● Awaiting Payment</option>
+                    <option
+                      value="In Pre-Press"
+                      disabled={req.progressStage === 1 && req.unpaidAmount > 0}
+                    >
+                      ● In Pre-Press
+                    </option>
+                    <option
+                      value="In Production"
+                      disabled={req.progressStage === 1 && req.unpaidAmount > 0}
+                    >
+                      ● In Production
+                    </option>
+                    <option
+                      value="Ready for Pickup"
+                      disabled={req.progressStage === 1 && req.unpaidAmount > 0}
+                    >
+                      ✓ Ready for Pickup
+                    </option>
+                    <option
+                      value="Completed"
+                      disabled={req.progressStage === 1 && req.unpaidAmount > 0}
+                    >
+                      ✓ Completed
+                    </option>
                     <option value="Cancelled">× Cancelled</option>
                   </select>
                 </td>
@@ -256,7 +283,13 @@ export function OrderManagement({
               <span className="font-mono font-black text-xs bg-amber-100 text-black px-2 py-0.5 rounded border border-[#D4A017]">
                 {req.id}
               </span>
-              <span className="text-xs font-extrabold text-[#B8860B]">{req.status}</span>
+              <span className="text-xs font-extrabold text-[#B8860B]">
+                {req.status === 'Unpaid Balance'
+                  ? req.unpaidAmount === 0
+                    ? 'Paid — Awaiting Confirmation'
+                    : 'Awaiting Payment'
+                  : req.status}
+              </span>
             </div>
             <div className="text-xs font-bold">{req.customerName}</div>
             <div className="flex justify-between text-xs">

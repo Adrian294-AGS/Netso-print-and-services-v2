@@ -73,7 +73,7 @@ interface AdminPortalProps {
     newStage: number,
     adminNote?: string
   ) => void;
-  onVerifyPayment: (orderId: string) => void;
+  onReviewPayment: (paymentId: string, status: 'verified' | 'flagged') => void;
   onRecordPayment: (orderId: string, amount: number) => void;
   onSendAdminReply: (threadId: string, text: string) => void;
   onCreateWalkInOrder: (
@@ -103,7 +103,7 @@ export function AdminPortal({
   notifications,
   setNotifications,
   onUpdateOrderStatus,
-  onVerifyPayment,
+  onReviewPayment,
   onRecordPayment,
   onSendAdminReply,
   onCreateWalkInOrder,
@@ -368,8 +368,8 @@ export function AdminPortal({
           calloutTitle={`₱${stats.totalUnpaidAmount.toLocaleString()} Unpaid Balance`}
           calloutDesc={
             stats.unverifiedPayments > 0
-              ? `${stats.unverifiedPayments} GCash reference(s) waiting for admin verification.`
-              : 'All submitted GCash references are verified.'
+              ? `${stats.unverifiedPayments} manual payment(s) waiting for review.`
+              : 'No manual payments are waiting for review.'
           }
           calloutButtonLabel="Open Payment Ledger"
           onCalloutAction={() => setActiveTab('payments')}
@@ -429,7 +429,7 @@ export function AdminPortal({
               requests={requests}
               payments={payments}
               onSelectOrder={(ord) => setSelectedOrderForDetails(ord)}
-              onVerifyPayment={onVerifyPayment}
+              onReviewPayment={onReviewPayment}
               onRecordPayment={onRecordPayment}
               highContrastMode={highContrastMode}
               fontSizeLevel={fontSizeLevel}
@@ -541,9 +541,15 @@ export function AdminPortal({
       {/* Modals & Drawers */}
       <AdminRequestDetailsModal
         order={activeModalOrder}
+        pendingPaymentAmount={payments
+          .filter(
+            (payment) =>
+              payment.requestId === activeModalOrder?.id &&
+              (payment.status === 'Pending Review' || payment.status === 'Pending'),
+          )
+          .reduce((sum, payment) => sum + payment.amount, 0)}
         onClose={() => setSelectedOrderForDetails(null)}
         onUpdateStatus={onUpdateOrderStatus}
-        onVerifyPayment={onVerifyPayment}
         onRecordPayment={onRecordPayment}
         onMessageCustomer={(orderId) => {
           const found = threads.find((t) => t.requestId === orderId);

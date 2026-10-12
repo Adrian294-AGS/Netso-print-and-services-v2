@@ -244,19 +244,29 @@ export function AdminDashboard({
                 <div className="space-y-2">
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs font-bold">
                     {[
-                      { stage: 1, label: '1. Pending', status: 'Unpaid Balance' as OrderStatus },
+                      { stage: 1, label: '1. Awaiting Payment', status: 'Unpaid Balance' as OrderStatus },
                       { stage: 2, label: '2. Confirmed', status: 'In Pre-Press' as OrderStatus },
                       { stage: 3, label: '3. In Progress', status: 'In Production' as OrderStatus },
                       { stage: 4, label: '4. Ready', status: 'Ready for Pickup' as OrderStatus },
                     ].map((st) => {
                       const isCurrent = req.progressStage === st.stage && req.status !== 'Completed';
                       const isReached = req.progressStage >= st.stage;
+                      const confirmationBlocked =
+                        req.progressStage === 1 && req.unpaidAmount > 0 && st.stage > 1;
                       return (
                         <button
                           key={st.stage}
                           type="button"
+                          disabled={confirmationBlocked}
+                          title={
+                            confirmationBlocked
+                              ? 'Verify the full payment before confirming this order.'
+                              : undefined
+                          }
                           onClick={() => onUpdateOrderStatus(req.id, st.status, st.stage)}
-                          className={`truncate py-1.5 px-2.5 rounded-lg border text-center transition-all cursor-pointer ${
+                          className={`truncate py-1.5 px-2.5 rounded-lg border text-center transition-all ${
+                            confirmationBlocked ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+                          } ${
                             isCurrent
                               ? 'bg-[#121214] text-[#D4A017] border-[#D4A017] font-extrabold shadow-xs'
                               : isReached

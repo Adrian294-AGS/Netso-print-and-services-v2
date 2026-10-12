@@ -61,6 +61,10 @@ type OrderRow = {
 function toClientOrder(row: OrderRow, files: Array<{ ID: number; original_file_name: string; file_size_bytes: string | number | null; file_extension: string | null }>) {
   const amount = Number(row.total_amount);
   const paidAmount = Number(row.paid_amount);
+  const unpaidAmount = Math.max(
+    0,
+    Math.round(amount * 100) - Math.round(paidAmount * 100),
+  ) / 100;
   return {
     id: row.order_number,
     customerId: row.user_id ?? 'walk-in',
@@ -80,7 +84,7 @@ function toClientOrder(row: OrderRow, files: Array<{ ID: number; original_file_n
     date: new Date(row.created_at).toISOString().slice(0, 10),
     amount,
     paidAmount,
-    unpaidAmount: Math.max(0, amount - paidAmount),
+    unpaidAmount,
     status: row.status,
     progressStage: row.progress_stage,
     notes: row.notes ?? '',
@@ -393,14 +397,36 @@ export async function PATCH(request: NextRequest) {
 
     await connection.beginTransaction();
     const rows = await queryRows<
-      { ID: number; status: string; user_id: string | null } & import('mysql2/promise').RowDataPacket
+      { ID: number; status: string; progress_stage: number; user_id: string | null; total_amount: string | number } & import('mysql2/promise').RowDataPacket
     >(
       connection,
-      'SELECT ID, status, user_id FROM tbl_print_order WHERE order_number = ? FOR UPDATE',
+      'SELECT ID, status, progress_stage, user_id, total_amount FROM tbl_print_order WHERE order_number = ? FOR UPDATE',
       [orderNumber],
     );
     const order = rows[0];
     if (!order) throw new ApiError(404, 'Order not found.');
+    const isConfirmingOrder =
+      statusResult.data !== 'Unpaid Balance' &&
+      statusResult.data !== 'Cancelled' &&
+      (order.status === 'Unpaid Balance' ||
+        order.status === 'Cancelled' ||
+        order.progress_stage < 2);
+    if (isConfirmingOrder) {
+      const paymentRows = await queryRows<
+        { paid: string | number } & import('mysql2/promise').RowDataPacket
+      >(
+        connection,
+        `SELECT COALESCE(SUM(amount), 0) AS paid FROM tbl_payments
+         WHERE print_order_id = ? AND status = 'verified'`,
+        [order.ID],
+      );
+      if (
+        Math.round(Number(paymentRows[0]?.paid ?? 0) * 100) <
+        Math.round(Number(order.total_amount) * 100)
+      ) {
+        throw new ApiError(409, 'The order can only be confirmed after the full payment is verified.');
+      }
+    }
     await connection.execute(
       'UPDATE tbl_print_order SET status = ?, progress_stage = ?, notes = CONCAT(COALESCE(notes, ?), ?) WHERE ID = ?',
       [statusResult.data, progressStage, '', note ? ` [Staff note: ${note}]` : '', order.ID],

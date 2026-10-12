@@ -1,0 +1,35 @@
+{
+  "sessionId": "BR-20261010-008",
+  "timestamp": "2026-10-10T06:24:59.431Z",
+  "originalPrompt": "",
+  "status": "success",
+  "operationCount": 1,
+  "operationTypes": [
+    "terminal_command"
+  ],
+  "operations": [
+    {
+      "operationIndex": 0,
+      "operationId": "OP-20261010-142459-045",
+      "kind": "terminal_command",
+      "status": "success",
+      "message": "Terminal command executed successfully.\nOutput:\nimport { GetObjectCommand } from '@aws-sdk/client-s3';\nimport { getSignedUrl } from '@aws-sdk/s3-request-presigner';\nimport type { NextRequest } from 'next/server';\nimport { NextResponse } from 'next/server';\nimport { isStaffRole, requireSession } from '@/lib/server/auth';\nimport { apiErrorResponse, ApiError } from '@/lib/server/http';\nimport { getB2 } from '@/lib/server/b2';\nimport { mysqlPool, queryRows } from '@/lib/server/mysql';\n\nexport const runtime = 'nodejs';\n\nexport async function GET(\n  request: NextRequest,\n  { params }: { params: Promise<{ fileId: string }> },\n) {\n  try {\n    const user = await requireSession(request);\n    const { fileId } = await params;\n    if (!/^\\d+$/.test(fileId)) throw new ApiError(400, 'File ID is invalid.');\n    const rows = await queryRows<\n      {\n        storage_key: string;\n        original_file_name: string;\n        mime_type: string | null;\n        file_extension: string | null;\n        user_id: string | null;\n      } & import('mysql2/promise').RowDataPacket\n    >(\n      mysqlPool,\n      `SELECT f.storage_key, f.original_file_name, f.mime_type, f.file_extension, o.user_id\n       FROM tbl_print_order_file f\n       JOIN tbl_print_order o ON o.ID = f.print_order_id\n       WHERE f.ID = ? LIMIT 1`,\n      [fileId],\n    );\n    const file = rows[0];\n    if (!file || (!isStaffRole(user.role) && file.user_id !== user.id)) {\n      throw new ApiError(404, 'File not found.');\n    }\n    const { bucket, client } = getB2();\n    const fallbackMimeTypes: Record<string, string> = {\n      pdf: 'application/pdf',\n      png: 'image/png',\n      jpg: 'image/jpeg',\n      jpeg: 'image/jpeg',\n    };\n    const mimeType =\n      file.mime_type?.toLowerCase() ??\n      fallbackMimeTypes[file.file_extension?.toLowerCase() ?? ''] ??\n      'application/octet-stream';\n    const canViewInline =\n      mimeType === 'application/pdf' || mimeType === 'image/png' || mimeType === 'image/jpeg';\n    const viewInline = request.nextUrl.searchParams.get('view') === '1' && canViewInline;\n    const url = await getSignedUrl(\n      client,\n      new GetObjectCommand({\n        Bucket: bucket,\n        Key: file.storage_key,\n        ResponseContentDisposition: `${viewInline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(file.original_file_name)}`,\n        ResponseContentType: mimeType,\n      }),\n      { expiresIn: 120 },\n    );\n    return NextResponse.redirect(url, { status: 302, headers: { 'Cache-Control': 'no-store' } });\n  } catch (error) {\n    return apiErrorResponse(error);\n  }\n}\n",
+      "path": "",
+      "data": {
+        "command": "type \"src\\app\\api\\uploads\\[fileId]\\route.ts\"",
+        "output": "import { GetObjectCommand } from '@aws-sdk/client-s3';\nimport { getSignedUrl } from '@aws-sdk/s3-request-presigner';\nimport type { NextRequest } from 'next/server';\nimport { NextResponse } from 'next/server';\nimport { isStaffRole, requireSession } from '@/lib/server/auth';\nimport { apiErrorResponse, ApiError } from '@/lib/server/http';\nimport { getB2 } from '@/lib/server/b2';\nimport { mysqlPool, queryRows } from '@/lib/server/mysql';\n\nexport const runtime = 'nodejs';\n\nexport async function GET(\n  request: NextRequest,\n  { params }: { params: Promise<{ fileId: string }> },\n) {\n  try {\n    const user = await requireSession(request);\n    const { fileId } = await params;\n    if (!/^\\d+$/.test(fileId)) throw new ApiError(400, 'File ID is invalid.');\n    const rows = await queryRows<\n      {\n        storage_key: string;\n        original_file_name: string;\n        mime_type: string | null;\n        file_extension: string | null;\n        user_id: string | null;\n      } & import('mysql2/promise').RowDataPacket\n    >(\n      mysqlPool,\n      `SELECT f.storage_key, f.original_file_name, f.mime_type, f.file_extension, o.user_id\n       FROM tbl_print_order_file f\n       JOIN tbl_print_order o ON o.ID = f.print_order_id\n       WHERE f.ID = ? LIMIT 1`,\n      [fileId],\n    );\n    const file = rows[0];\n    if (!file || (!isStaffRole(user.role) && file.user_id !== user.id)) {\n      throw new ApiError(404, 'File not found.');\n    }\n    const { bucket, client } = getB2();\n    const fallbackMimeTypes: Record<string, string> = {\n      pdf: 'application/pdf',\n      png: 'image/png',\n      jpg: 'image/jpeg',\n      jpeg: 'image/jpeg',\n    };\n    const mimeType =\n      file.mime_type?.toLowerCase() ??\n      fallbackMimeTypes[file.file_extension?.toLowerCase() ?? ''] ??\n      'application/octet-stream';\n    const canViewInline =\n      mimeType === 'application/pdf' || mimeType === 'image/png' || mimeType === 'image/jpeg';\n    const viewInline = request.nextUrl.searchParams.get('view') === '1' && canViewInline;\n    const url = await getSignedUrl(\n      client,\n      new GetObjectCommand({\n        Bucket: bucket,\n        Key: file.storage_key,\n        ResponseContentDisposition: `${viewInline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(file.original_file_name)}`,\n        ResponseContentType: mimeType,\n      }),\n      { expiresIn: 120 },\n    );\n    return NextResponse.redirect(url, { status: 302, headers: { 'Cache-Control': 'no-store' } });\n  } catch (error) {\n    return apiErrorResponse(error);\n  }\n}\n",
+        "exitCode": 0,
+        "duration": 67,
+        "success": true
+      }
+    }
+  ],
+  "filesAffected": [],
+  "metadataUsed": {
+    "terminal_command": [
+      {}
+    ]
+  },
+  "terminalCommands": [],
+  "revertCommands": []
+}

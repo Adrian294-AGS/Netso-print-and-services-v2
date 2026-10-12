@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   X,
-  CheckCircle2,
   AlertTriangle,
   Wallet,
   Paperclip,
@@ -33,8 +32,8 @@ const STATUS_OPTIONS: { status: OrderStatus; stage: number; label: string; short
   {
     status: 'Unpaid Balance',
     stage: 1,
-    label: '1. Pending / Unpaid Balance (Awaiting Deposit)',
-    shortLabel: '1. Pending',
+    label: '1. Awaiting Payment',
+    shortLabel: '1. Awaiting Payment',
   },
   {
     status: 'In Pre-Press',
@@ -70,6 +69,7 @@ const STATUS_OPTIONS: { status: OrderStatus; stage: number; label: string; short
 
 interface RequestDetailsModalProps {
   order: RequestOrder | null;
+  pendingPaymentAmount: number;
   onClose: () => void;
   onUpdateStatus: (
     orderId: string,
@@ -77,7 +77,6 @@ interface RequestDetailsModalProps {
     newStage: number,
     adminNote?: string
   ) => void;
-  onVerifyPayment: (orderId: string) => void;
   onRecordPayment: (orderId: string, amount: number) => void;
   onMessageCustomer: (orderId: string) => void;
   highContrastMode: boolean;
@@ -86,9 +85,9 @@ interface RequestDetailsModalProps {
 
 export function AdminRequestDetailsModal({
   order,
+  pendingPaymentAmount,
   onClose,
   onUpdateStatus,
-  onVerifyPayment,
   onRecordPayment,
   onMessageCustomer,
   highContrastMode,
@@ -109,8 +108,19 @@ export function AdminRequestDetailsModal({
   }, [order]);
 
   if (!order) return null;
+  const requiresFullPayment =
+    order.progressStage < 2 && order.unpaidAmount > 0;
+  const paymentBlocksSelectedStatus =
+    requiresFullPayment &&
+    selectedStatus !== 'Unpaid Balance' &&
+    selectedStatus !== 'Cancelled';
+  const availableToRecord = Math.max(
+    0,
+    Math.round(order.unpaidAmount * 100) - Math.round(pendingPaymentAmount * 100),
+  ) / 100;
 
   const handleSaveStatus = () => {
+    if (paymentBlocksSelectedStatus) return;
     const matched = STATUS_OPTIONS.find((s) => s.status === selectedStatus);
     onUpdateStatus(
       order.id,
@@ -182,7 +192,11 @@ export function AdminRequestDetailsModal({
                 : 'bg-emerald-100 text-emerald-800 border-emerald-300'
             }`}
           >
-            {order.status}
+            {order.status === 'Unpaid Balance'
+              ? order.unpaidAmount === 0
+                ? 'Paid — Awaiting Confirmation'
+                : 'Awaiting Payment'
+              : order.status}
           </span>
         </div>
 
@@ -358,31 +372,26 @@ export function AdminRequestDetailsModal({
 
           <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-amber-200">
             <span className="text-xs font-bold text-zinc-700">
-              {order.paymentVerified
-                ? '✓ GCash Payment Verified by Admin'
+              {order.unpaidAmount === 0
+                ? '✓ Full payment verified'
                 : order.paidAmount > 0
-                ? '⚠ GCash Reference Pending Admin Verification'
-                : '! Unpaid — Payment First Policy Applies'}
+                  ? '✓ Partial payment verified'
+                  : '! Awaiting payment'}
             </span>
+            {pendingPaymentAmount > 0 && (
+              <span className="text-xs font-bold text-amber-700">
+                ₱{pendingPaymentAmount.toLocaleString()} pending verification
+              </span>
+            )}
             <div className="flex flex-wrap items-center gap-2">
-              {!order.paymentVerified && order.paidAmount > 0 && (
+              {availableToRecord > 0 && (
                 <button
                   type="button"
-                  onClick={() => onVerifyPayment(order.id)}
-                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-lg flex items-center gap-1.5 shadow-xs cursor-pointer"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Verify GCash Ref</span>
-                </button>
-              )}
-              {order.unpaidAmount > 0 && (
-                <button
-                  type="button"
-                  onClick={() => onRecordPayment(order.id, order.unpaidAmount)}
+                  onClick={() => onRecordPayment(order.id, availableToRecord)}
                   className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs rounded-lg flex items-center gap-1.5 shadow-xs cursor-pointer"
                 >
                   <Wallet className="w-4 h-4" />
-                  <span>Record ₱{order.unpaidAmount} GCash Settlement</span>
+                  <span>Submit ₱{availableToRecord} Payment for Review</span>
                 </button>
               )}
             </div>
@@ -407,8 +416,19 @@ export function AdminRequestDetailsModal({
                 <button
                   key={opt.status}
                   type="button"
+                  disabled={
+                    requiresFullPayment &&
+                    opt.status !== 'Unpaid Balance' &&
+                    opt.status !== 'Cancelled'
+                  }
                   onClick={() => setSelectedStatus(opt.status)}
-                  className={`py-1.5 px-2 rounded-lg font-extrabold text-xs text-center border transition-all cursor-pointer truncate ${
+                  className={`py-1.5 px-2 rounded-lg font-extrabold text-xs text-center border transition-all truncate ${
+                    requiresFullPayment &&
+                    opt.status !== 'Unpaid Balance' &&
+                    opt.status !== 'Cancelled'
+                      ? 'opacity-50 cursor-not-allowed'
+                      : 'cursor-pointer'
+                  } ${
                     isSelected
                       ? 'bg-[#121214] text-[#D4A017] border-[#D4A017] shadow-xs'
                       : highContrastMode
@@ -433,11 +453,24 @@ export function AdminRequestDetailsModal({
               }`}
             >
               {STATUS_OPTIONS.map((opt) => (
-                <option key={opt.status} value={opt.status}>
+                <option
+                  key={opt.status}
+                  value={opt.status}
+                  disabled={
+                    requiresFullPayment &&
+                    opt.status !== 'Unpaid Balance' &&
+                    opt.status !== 'Cancelled'
+                  }
+                >
                   {opt.label}
                 </option>
               ))}
             </select>
+            {requiresFullPayment && (
+              <p className="text-xs font-bold text-amber-800">
+                Verify the full payment before confirming this order.
+              </p>
+            )}
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
               <input
@@ -454,7 +487,15 @@ export function AdminRequestDetailsModal({
               <button
                 type="button"
                 onClick={handleSaveStatus}
-                className="w-full sm:w-auto px-5 py-2.5 bg-[#D4A017] hover:bg-[#B8860B] text-black font-extrabold uppercase text-xs sm:text-sm rounded-xl border border-black flex items-center justify-center gap-1.5 shadow-xs shrink-0 cursor-pointer transition-colors"
+                disabled={paymentBlocksSelectedStatus}
+                title={
+                  paymentBlocksSelectedStatus
+                    ? 'Verify the full payment before confirming this order.'
+                    : undefined
+                }
+                className={`w-full sm:w-auto px-5 py-2.5 bg-[#D4A017] hover:bg-[#B8860B] text-black font-extrabold uppercase text-xs sm:text-sm rounded-xl border border-black flex items-center justify-center gap-1.5 shadow-xs shrink-0 transition-colors ${
+                  paymentBlocksSelectedStatus ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                }`}
               >
                 {statusSaved ? (
                   <>
