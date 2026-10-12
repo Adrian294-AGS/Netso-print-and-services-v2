@@ -1,11 +1,21 @@
+
 'use client';
 
 import React, { useState } from 'react';
-import { AlertCircle, ArrowRight, Eye, EyeOff, Lock, Mail } from 'lucide-react';
+import {
+  AlertCircle,
+  ArrowRight,
+  Eye,
+  EyeOff,
+  Lock,
+  Mail,
+} from 'lucide-react';
+import TurnstileCaptcha from './turnstileCaptcha';
 
 export interface LoginFormData {
   email: string;
   password: string;
+  captchaToken: string;
 }
 
 interface LoginProps {
@@ -17,7 +27,14 @@ export function Login({ isSubmitting, onSubmit }: LoginProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [captchaToken, setCaptchaToken] = useState('');
+  const [resetCaptchaKey, setResetCaptchaKey] = useState(0);
+
+  const [errors, setErrors] = useState<{
+    email?: string;
+    password?: string;
+    captcha?: string;
+  }>({});
 
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -34,21 +51,40 @@ export function Login({ isSubmitting, onSubmit }: LoginProps) {
       nextErrors.password = 'Password is required.';
     }
 
+    if (!captchaToken) {
+      nextErrors.captcha = 'Please complete the CAPTCHA verification.';
+    }
+
     setErrors(nextErrors);
 
-    if (Object.keys(nextErrors).length === 0) {
-      onSubmit({ email, password });
+    if (Object.keys(nextErrors).length !== 0 || isSubmitting) {
+      return;
     }
+
+    const submittedData: LoginFormData = {
+      email: email.trim(),
+      password,
+      captchaToken,
+    };
+
+    setCaptchaToken('');
+    setResetCaptchaKey((current) => current + 1);
+
+    onSubmit(submittedData);
   };
 
   return (
     <form onSubmit={submit} className="space-y-4" noValidate>
       <div>
-        <label className="block text-sm font-bold text-neutral-200 mb-1.5">Email Address</label>
+        <label className="block text-sm font-bold text-neutral-200 mb-1.5">
+          Email Address
+        </label>
+
         <div className="relative rounded-xl bg-neutral-950 border border-neutral-800 focus-within:border-amber-500 transition-colors">
           <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-neutral-400">
             <Mail className="w-5 h-5" />
           </span>
+
           <input
             type="email"
             autoComplete="email"
@@ -61,15 +97,20 @@ export function Login({ isSubmitting, onSubmit }: LoginProps) {
             className="w-full pl-11 pr-4 py-3 bg-transparent text-sm sm:text-base text-white placeholder-neutral-500 rounded-xl focus:outline-none"
           />
         </div>
+
         {errors.email && <ErrorMessage message={errors.email} />}
       </div>
 
       <div>
-        <label className="block text-sm font-bold text-neutral-200 mb-1.5">Password</label>
+        <label className="block text-sm font-bold text-neutral-200 mb-1.5">
+          Password
+        </label>
+
         <div className="relative rounded-xl bg-neutral-950 border border-neutral-800 focus-within:border-amber-500 transition-colors">
           <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-neutral-400">
             <Lock className="w-5 h-5" />
           </span>
+
           <input
             type={showPassword ? 'text' : 'password'}
             autoComplete="current-password"
@@ -81,16 +122,37 @@ export function Login({ isSubmitting, onSubmit }: LoginProps) {
             placeholder="••••••••"
             className="w-full pl-11 pr-11 py-3 bg-transparent text-sm sm:text-base text-white placeholder-neutral-500 rounded-xl focus:outline-none"
           />
+
           <button
             type="button"
             onClick={() => setShowPassword((current) => !current)}
             className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-neutral-400 hover:text-amber-400 transition-colors cursor-pointer"
             aria-label={showPassword ? 'Hide password' : 'Show password'}
           >
-            {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+            {showPassword ? (
+              <EyeOff className="w-5 h-5" />
+            ) : (
+              <Eye className="w-5 h-5" />
+            )}
           </button>
         </div>
+
         {errors.password && <ErrorMessage message={errors.password} />}
+      </div>
+
+      <div className="space-y-2 pt-2">
+        <label className="block text-sm font-bold text-neutral-200">
+          Security Verification
+        </label>
+
+        <TurnstileCaptcha
+          onTokenChange={setCaptchaToken}
+          resetKey={resetCaptchaKey}
+        />
+
+        {errors.captcha && (
+          <ErrorMessage message={errors.captcha} />
+        )}
       </div>
 
       <button
@@ -107,7 +169,10 @@ export function Login({ isSubmitting, onSubmit }: LoginProps) {
 
 function ErrorMessage({ message }: { message: string }) {
   return (
-    <p className="text-xs sm:text-sm text-red-400 mt-1.5 flex items-center gap-1.5 font-medium">
+    <p
+      role="alert"
+      className="text-xs sm:text-sm text-red-400 mt-1.5 flex items-center gap-1.5 font-medium"
+    >
       <AlertCircle className="w-4 h-4 shrink-0" />
       {message}
     </p>

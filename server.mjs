@@ -1,4 +1,6 @@
 import { createServer } from 'node:http';
+import { setServers } from 'node:dns';
+import nextEnv from '@next/env';
 import next from 'next';
 import { jwtVerify } from 'jose';
 import mysql from 'mysql2/promise';
@@ -15,6 +17,16 @@ const validRoles = new Set([
   'pre_press_artist',
   'front_desk_cashier',
 ]);
+
+const { loadEnvConfig } = nextEnv;
+loadEnvConfig(process.cwd(), development);
+const dnsServers = process.env.MONGODB_DNS_SERVERS?.split(',').map((server) => server.trim());
+if (dnsServers) {
+  if (dnsServers.some((server) => !server)) {
+    throw new Error('MONGODB_DNS_SERVERS must be a comma-separated list of DNS server addresses.');
+  }
+  setServers(dnsServers);
+}
 
 if (!Number.isSafeInteger(port) || port < 1 || port > 65535) {
   throw new Error('PORT must be a valid TCP port.');
