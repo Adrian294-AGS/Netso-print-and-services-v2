@@ -72,7 +72,7 @@ export function OrderManagement({
                 : 'text-xl sm:text-2xl'
             }`}
           >
-            Order Management (tbl_print_order)
+            Order Management 
           </h1>
           <p
             className={`font-medium mt-0.5 ${

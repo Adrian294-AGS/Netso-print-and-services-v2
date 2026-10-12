@@ -186,12 +186,17 @@ export function AdminPaymentsTab({
           Balance per Customer Request (tbl_payment_intents / tbl_payments)
         </h2>
 
+        {/*
+          FIX: wrapper changed from `overflow-hidden` to `overflow-x-auto` so that
+          when the columns need more room (long statuses, larger digits) the table
+          scrolls horizontally instead of clipping or wrapping its content.
+        */}
         <div
-          className={`hidden md:block rounded-2xl border overflow-hidden shadow-xs ${
+          className={`hidden md:block rounded-2xl border overflow-x-auto shadow-xs ${
             highContrastMode ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-zinc-300'
           }`}
         >
-          <table className="w-full text-left border-collapse text-xs">
+          <table className="w-full min-w-[1100px] text-left border-collapse text-xs">
             <thead>
               <tr className="bg-[#121214] text-[#E6B222] uppercase tracking-wider font-extrabold">
                 <th className="py-3 px-3.5">Request</th>
@@ -200,8 +205,10 @@ export function AdminPaymentsTab({
                 <th className="py-3 px-3.5">Total Amount</th>
                 <th className="py-3 px-3.5">Amount Paid</th>
                 <th className="py-3 px-3.5">Balance Due</th>
-                <th className="py-3 px-3.5">Status</th>
-                <th className="py-3 px-3.5 text-right">Actions</th>
+                {/* FIX: reserve enough width for the longest status pill */}
+                <th className="py-3 px-3.5 min-w-[190px]">Status</th>
+                {/* FIX: reserve enough width for Verify Ref + Settle + Details */}
+                <th className="py-3 px-3.5 min-w-[300px] text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
@@ -213,58 +220,65 @@ export function AdminPaymentsTab({
                   <td className="py-3 px-3.5 font-mono font-black text-[#B8860B]">{req.id}</td>
                   <td className="py-3 px-3.5 font-bold">{req.customerName}</td>
                   <td className="py-3 px-3.5 font-medium">{req.service}</td>
-                  <td className="py-3 px-3.5 font-mono font-bold">₱{req.amount}</td>
-                  <td className="py-3 px-3.5 font-mono font-bold text-emerald-700">
+                  {/* FIX: money cells never wrap and use equal-width digits */}
+                  <td className="py-3 px-3.5 font-mono font-bold whitespace-nowrap tabular-nums">
+                    ₱{req.amount}
+                  </td>
+                  <td className="py-3 px-3.5 font-mono font-bold text-emerald-700 whitespace-nowrap tabular-nums">
                     ₱{req.paidAmount} {req.paidAmount > 0 && req.unpaidAmount > 0 ? '(50% down)' : ''}
                   </td>
                   <td
-                    className={`py-3 px-3.5 font-mono font-black ${
+                    className={`py-3 px-3.5 font-mono font-black whitespace-nowrap tabular-nums ${
                       req.unpaidAmount > 0 ? 'text-red-600' : 'text-zinc-500'
                     }`}
                   >
                     ₱{req.unpaidAmount}
                   </td>
                   <td className="py-3 px-3.5">
+                    {/* FIX: inline-flex + whitespace-nowrap keeps each pill on one line */}
                     {req.unpaidAmount === 0 ? (
-                      <span className="px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                      <span className="inline-flex items-center whitespace-nowrap px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">
                         ✓ Fully Paid
                       </span>
                     ) : req.paidAmount > 0 ? (
-                      <span className="px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300">
+                      <span className="inline-flex items-center whitespace-nowrap px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300">
                         ◐ Partial — Balance Due
                       </span>
                     ) : (
-                      <span className="px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-red-100 text-red-800 border border-red-300">
+                      <span className="inline-flex items-center whitespace-nowrap px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-red-100 text-red-800 border border-red-300">
                         ! Unpaid
                       </span>
                     )}
                   </td>
-                  <td className="py-3 px-3.5 text-right space-x-1.5 whitespace-nowrap">
-                    {!req.paymentVerified && req.paidAmount > 0 && (
+                  <td className="py-3 px-3.5">
+                    {/* FIX: flex container with fixed-min-width buttons keeps actions aligned */}
+                    <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                      {!req.paymentVerified && req.paidAmount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => onVerifyPayment(req.id)}
+                          className="inline-flex items-center justify-center min-w-[84px] px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] rounded-lg cursor-pointer"
+                        >
+                          Verify Ref
+                        </button>
+                      )}
+                      {req.unpaidAmount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => onRecordPayment(req.id, req.unpaidAmount)}
+                          className="inline-flex items-center justify-center min-w-[104px] px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[11px] rounded-lg cursor-pointer tabular-nums"
+                        >
+                          Settle ₱{req.unpaidAmount}
+                        </button>
+                      )}
                       <button
                         type="button"
-                        onClick={() => onVerifyPayment(req.id)}
-                        className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] rounded-lg cursor-pointer"
+                        onClick={() => onSelectOrder(req)}
+                        className="inline-flex items-center justify-center min-w-[72px] px-2.5 py-1 bg-amber-100 hover:bg-[#D4A017] text-black font-extrabold text-[11px] rounded-lg border border-black cursor-pointer"
                       >
-                        Verify Ref
+                        Details
                       </button>
-                    )}
-                    {req.unpaidAmount > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => onRecordPayment(req.id, req.unpaidAmount)}
-                        className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[11px] rounded-lg cursor-pointer"
-                      >
-                        Settle ₱{req.unpaidAmount}
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => onSelectOrder(req)}
-                      className="px-2.5 py-1 bg-amber-100 hover:bg-[#D4A017] text-black font-extrabold text-[11px] rounded-lg border border-black cursor-pointer"
-                    >
-                      Details
-                    </button>
+                    </div>
                   </td>
                 </tr>
               ))}

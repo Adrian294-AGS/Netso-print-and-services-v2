@@ -265,7 +265,7 @@ export function AdminPortal({
     {
       id: 'orders',
       label: 'Service Requests',
-      desc: 'tbl_print_order & status control',
+      desc: 'order & status control',
       icon: FileText,
       badge: requests.length,
     },
