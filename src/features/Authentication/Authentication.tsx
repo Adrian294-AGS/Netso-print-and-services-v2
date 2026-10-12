@@ -67,21 +67,27 @@ export function Authentication({ onAuthenticated }: AuthenticationProps) {
     }
   };
 
-  const handleLogin = (data: LoginFormData) => {
-    void handleApiAuthentication('/api/auth/login', {
-      email: data.email,
-      password: data.password,
-    });
-  };
+  
+const handleLogin = (data: LoginFormData) => {
+  void handleApiAuthentication('/api/auth/login', {
+    email: data.email,
+    password: data.password,
+    captchaToken: data.captchaToken,
+  });
+};
 
-  const handleSignup = (data: SignupFormData) => {
-    void handleApiAuthentication('/api/auth/register', {
-      fullName: data.fullName,
-      email: data.email,
-      phone: data.phone,
-      password: data.password,
-    });
-  };
+
+  
+const handleSignup = (data: SignupFormData) => {
+  void handleApiAuthentication('/api/auth/register', {
+    fullName: data.fullName,
+    email: data.email,
+    phone: data.phone,
+    password: data.password,
+    captchaToken: data.captchaToken,
+  });
+};
+
 
   const handleGoogleAuth = () => {
     setIsSubmitting(true);

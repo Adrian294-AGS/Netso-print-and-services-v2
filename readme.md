@@ -148,6 +148,9 @@ It does not charge a payment provider.
    Allow the deployment host in the Atlas network access list. The app creates its
    message, audit, and rate-limit indexes on first connection; the MongoDB user must
    be permitted to create indexes in those collections.
+   If the local DNS resolver refuses Atlas SRV lookups, set
+   `MONGODB_DNS_SERVERS=8.8.8.8,1.1.1.1` in `.env` to use those resolvers for Node.js
+   DNS requests made by the app.
 5. Create a Google OAuth web client. Add
    `http://localhost:3000/api/auth/google/callback` as an authorized redirect URI
    locally. OAuth is configured using `GOOGLE_CLIENT_ID` and

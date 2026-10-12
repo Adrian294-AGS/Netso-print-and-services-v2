@@ -1,7 +1,19 @@
+
 'use client';
 
 import React, { useState } from 'react';
-import { AlertCircle, ArrowRight, Eye, EyeOff, KeyRound, Lock, Mail, Phone, User } from 'lucide-react';
+import {
+  AlertCircle,
+  ArrowRight,
+  Eye,
+  EyeOff,
+  KeyRound,
+  Lock,
+  Mail,
+  Phone,
+  User,
+} from 'lucide-react';
+import TurnstileCaptcha from './turnstileCaptcha';
 
 export interface SignupFormData {
   fullName: string;
@@ -9,12 +21,15 @@ export interface SignupFormData {
   phone: string;
   password: string;
   confirmPassword: string;
+  captchaToken: string;
 }
 
 interface SignupProps {
   isSubmitting: boolean;
   onSubmit: (data: SignupFormData) => void;
 }
+
+type SignupErrors = Partial<Record<keyof SignupFormData, string>>;
 
 export function Signup({ isSubmitting, onSubmit }: SignupProps) {
   const [formData, setFormData] = useState<SignupFormData>({
@@ -23,30 +38,44 @@ export function Signup({ isSubmitting, onSubmit }: SignupProps) {
     phone: '',
     password: '',
     confirmPassword: '',
+    captchaToken: '',
   });
+
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [errors, setErrors] = useState<Partial<Record<keyof SignupFormData, string>>>({});
+  const [resetCaptchaKey, setResetCaptchaKey] = useState(0);
+  const [errors, setErrors] = useState<SignupErrors>({});
 
   const updateField = (field: keyof SignupFormData, value: string) => {
-    setFormData((current) => ({ ...current, [field]: value }));
-    setErrors((current) => ({ ...current, [field]: '' }));
+    setFormData((current) => ({
+      ...current,
+      [field]: value,
+    }));
+
+    setErrors((current) => ({
+      ...current,
+      [field]: '',
+    }));
   };
 
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const nextErrors: Partial<Record<keyof SignupFormData, string>> = {};
+    const nextErrors: SignupErrors = {};
 
-    if (!formData.fullName.trim()) nextErrors.fullName = 'Full name is required.';
+    if (!formData.fullName.trim()) {
+      nextErrors.fullName = 'Full name is required.';
+    }
 
     if (!formData.email.trim()) {
       nextErrors.email = 'Email address is required.';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+    } else if (!/^\S+@\S+\.\S+$/.test(formData.email.trim())) {
       nextErrors.email = 'Please enter a valid email address.';
     }
 
-    if (!formData.phone.trim()) nextErrors.phone = 'Mobile phone number is required.';
+    if (!formData.phone.trim()) {
+      nextErrors.phone = 'Mobile phone number is required.';
+    }
 
     if (!formData.password) {
       nextErrors.password = 'Password is required.';
@@ -60,9 +89,30 @@ export function Signup({ isSubmitting, onSubmit }: SignupProps) {
       nextErrors.confirmPassword = 'Passwords do not match.';
     }
 
+    if (!formData.captchaToken) {
+      nextErrors.captchaToken = 'Please complete the CAPTCHA verification.';
+    }
+
     setErrors(nextErrors);
 
-    if (Object.keys(nextErrors).length === 0) onSubmit(formData);
+    if (Object.keys(nextErrors).length > 0 || isSubmitting) {
+      return;
+    }
+
+    const submittedData: SignupFormData = {
+      ...formData,
+      fullName: formData.fullName.trim(),
+      email: formData.email.trim(),
+    };
+
+    onSubmit(submittedData);
+
+    setFormData((current) => ({
+      ...current,
+      captchaToken: '',
+    }));
+
+    setResetCaptchaKey((current) => current + 1);
   };
 
   return (
@@ -75,6 +125,7 @@ export function Signup({ isSubmitting, onSubmit }: SignupProps) {
         error={errors.fullName}
         onChange={(value) => updateField('fullName', value)}
       />
+
       <Field
         label="Email Address"
         icon={<Mail className="w-5 h-5" />}
@@ -84,6 +135,7 @@ export function Signup({ isSubmitting, onSubmit }: SignupProps) {
         error={errors.email}
         onChange={(value) => updateField('email', value)}
       />
+
       <Field
         label="Mobile Number"
         icon={<Phone className="w-5 h-5" />}
@@ -112,6 +164,21 @@ export function Signup({ isSubmitting, onSubmit }: SignupProps) {
         onToggle={() => setShowConfirmPassword((current) => !current)}
         onChange={(value) => updateField('confirmPassword', value)}
       />
+
+      <div className="space-y-2 pt-2">
+        <label className="block text-sm font-bold text-neutral-200">
+          Security Verification
+        </label>
+
+        <TurnstileCaptcha
+          onTokenChange={(token) => updateField('captchaToken', token)}
+          resetKey={resetCaptchaKey}
+        />
+
+        {errors.captchaToken && (
+          <ErrorMessage message={errors.captchaToken} />
+        )}
+      </div>
 
       <button
         type="submit"
@@ -144,19 +211,27 @@ function Field({
 }) {
   return (
     <div>
-      <label className="block text-sm font-bold text-neutral-200 mb-1.5">{label}</label>
+      <label className="block text-sm font-bold text-neutral-200 mb-1.5">
+        {label}
+      </label>
+
       <div className="relative rounded-xl bg-neutral-950 border border-neutral-800 focus-within:border-amber-500 transition-colors">
         <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-neutral-400">
           {icon}
         </span>
+
         <input
           type={type}
+          autoComplete={
+            type === 'email' ? 'email' : type === 'tel' ? 'tel' : 'name'
+          }
           value={value}
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
           className="w-full pl-11 pr-4 py-3 bg-transparent text-sm sm:text-base text-white placeholder-neutral-500 rounded-xl focus:outline-none"
         />
       </div>
+
       {error && <ErrorMessage message={error} />}
     </div>
   );
@@ -181,27 +256,38 @@ function PasswordField({
 }) {
   return (
     <div>
-      <label className="block text-sm font-bold text-neutral-200 mb-1.5">{label}</label>
+      <label className="block text-sm font-bold text-neutral-200 mb-1.5">
+        {label}
+      </label>
+
       <div className="relative rounded-xl bg-neutral-950 border border-neutral-800 focus-within:border-amber-500 transition-colors">
         <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-neutral-400">
           {icon}
         </span>
+
         <input
           type={showPassword ? 'text' : 'password'}
+          autoComplete="new-password"
           value={value}
           onChange={(event) => onChange(event.target.value)}
           placeholder="••••••••"
           className="w-full pl-11 pr-11 py-3 bg-transparent text-sm sm:text-base text-white placeholder-neutral-500 rounded-xl focus:outline-none"
         />
+
         <button
           type="button"
           onClick={onToggle}
           className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-neutral-400 hover:text-amber-400 transition-colors cursor-pointer"
           aria-label={showPassword ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
         >
-          {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+          {showPassword ? (
+            <EyeOff className="w-5 h-5" />
+          ) : (
+            <Eye className="w-5 h-5" />
+          )}
         </button>
       </div>
+
       {error && <ErrorMessage message={error} />}
     </div>
   );
@@ -209,7 +295,10 @@ function PasswordField({
 
 function ErrorMessage({ message }: { message: string }) {
   return (
-    <p className="text-xs sm:text-sm text-red-400 mt-1.5 flex items-center gap-1.5 font-medium">
+    <p
+      role="alert"
+      className="text-xs sm:text-sm text-red-400 mt-1.5 flex items-center gap-1.5 font-medium"
+    >
       <AlertCircle className="w-4 h-4 shrink-0" />
       {message}
     </p>
