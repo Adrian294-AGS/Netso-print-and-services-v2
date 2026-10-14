@@ -1,12 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { PutObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireSession } from '@/lib/server/auth';
 import { apiErrorResponse, ApiError, assertSameOrigin, readJson } from '@/lib/server/http';
-import { getB2 } from '@/lib/server/b2';
 import { mysqlPool, queryRows } from '@/lib/server/mysql';
 import { enforceRateLimit } from '@/lib/server/rate-limit';
 
@@ -59,27 +56,14 @@ export async function POST(request: NextRequest) {
     if (Number(counts[0]?.count ?? 0) >= 10) throw new ApiError(400, 'An order can have at most 10 files.');
 
     const key = `orders/${order.order_number}/${randomUUID()}.${extension}`;
-    const { bucket, client } = getB2();
-    const command = new PutObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      ContentType: contentType,
-      ContentLength: size,
-      Metadata: { 'order-number': order.order_number },
-    });
-    const uploadUrl = await getSignedUrl(client, command, {
-      expiresIn: 300,
-      unhoistableHeaders: new Set(['x-amz-meta-order-number']),
-    });
+    const uploadUrl = `/api/uploads/object?orderId=${encodeURIComponent(order.order_number)}&key=${encodeURIComponent(key)}`;
     return NextResponse.json({
       ok: true,
       uploadUrl,
       key,
       requiredHeaders: {
         'Content-Type': contentType,
-        'x-amz-meta-order-number': order.order_number,
       },
-      expiresIn: 300,
     });
   } catch (error) {
     return apiErrorResponse(error);

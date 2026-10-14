@@ -579,7 +579,8 @@ export function CustomerPortal({
         if (!signResponse.ok) throw new Error(signed.error || `Unable to prepare ${file.name} for upload.`);
         const uploadResponse = await fetch(signed.uploadUrl, {
           method: 'PUT',
-          headers: signed.requiredHeaders,
+          credentials: 'same-origin',
+          headers: { 'Content-Type': contentType },
           body: file.file,
         });
         if (!uploadResponse.ok) throw new Error(`Cloud file upload failed for ${file.name}.`);
