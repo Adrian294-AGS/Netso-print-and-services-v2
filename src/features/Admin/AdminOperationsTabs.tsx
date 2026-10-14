@@ -242,7 +242,7 @@ export function AdminPaymentsTab({
         <h2 className={`text-xs sm:text-sm font-extrabold uppercase tracking-wider ${
           highContrastMode ? 'text-white' : 'text-zinc-950'
         }`}>
-          Balance per Customer Request (tbl_payment_intents / tbl_payments)
+          Balance per Customer Request
         </h2>
 
         <div
@@ -446,7 +446,7 @@ export function AdminPaymentsTab({
         <h2 className={`text-xs sm:text-sm font-extrabold uppercase tracking-wider ${
           highContrastMode ? 'text-white' : 'text-zinc-950'
         }`}>
-          Payment Transaction Log (tbl_payments)
+          Payment Transaction Log
         </h2>
 
         <div className="md:hidden space-y-2">
@@ -734,7 +734,7 @@ export function AdminCustomersAndMessages({
                     : 'text-xl sm:text-2xl'
               }`}
             >
-              Customer Directory (tbl_user)
+              Customer Directory
             </h1>
 
             <p

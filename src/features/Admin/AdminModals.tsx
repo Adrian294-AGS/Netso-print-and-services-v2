@@ -202,7 +202,7 @@ export function AdminRequestDetailsModal({
           </span>
         </div>
 
-        {/* 1. Customer Information (tbl_user) */}
+        {/* 1. Customer Information */}
         <div
           className={`p-3.5 rounded-xl border-l-4 border-l-[#D4A017] border space-y-2.5 ${
             highContrastMode ? 'bg-zinc-900 border-zinc-700' : 'bg-zinc-50 border-zinc-200'
@@ -240,7 +240,7 @@ export function AdminRequestDetailsModal({
           </div>
         </div>
 
-        {/* 2. Service Information (tbl_print_order) */}
+        {/* 2. Service Information */}
         <div
           className={`p-3.5 rounded-xl border-l-4 border-l-[#D4A017] border space-y-2.5 ${
             highContrastMode ? 'bg-zinc-900 border-zinc-700' : 'bg-zinc-50 border-zinc-200'
@@ -334,7 +334,7 @@ export function AdminRequestDetailsModal({
           )}
         </div>
 
-        {/* 4. Payment Details (tbl_payment_intents / tbl_payments) */}
+        {/* 4. Payment Details */}
         <div className="p-3.5 rounded-xl border border-amber-300 bg-amber-50/80 text-zinc-950 space-y-2.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-xs font-extrabold uppercase tracking-wider text-[#B8860B]">

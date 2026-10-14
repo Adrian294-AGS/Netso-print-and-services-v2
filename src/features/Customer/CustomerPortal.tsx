@@ -1541,7 +1541,11 @@ export function CustomerPortal({
                         Payment method: {req.paymentMethod ?? 'Not specified'}
                       </p>
                       <span className="text-xs sm:text-sm text-zinc-500 font-mono">
-                        GCash Ref: {req.gcashRefNo || 'Pending Checkout'}
+                        {req.paymentMethod === 'GCash'
+                          ? `GCash Ref: ${req.gcashRefNo || 'Pending Checkout'}`
+                          : req.paymentMethod === 'Cash on Pickup'
+                            ? 'Cash is due at pickup'
+                            : 'No payment reference'}
                       </span>
                     </div>
                     <div className="text-right space-y-1.5">
@@ -1549,14 +1553,22 @@ export function CustomerPortal({
                         Paid: <strong className="text-emerald-700">₱{req.paidAmount}</strong> ·
                         Balance: <strong className="text-red-600">₱{req.unpaidAmount}</strong>
                       </div>
-                      {req.unpaidAmount > 0 && gcashEnabled ? (
-                        <button
-                          type="button"
-                          onClick={() => openGCashPayment(req)}
-                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs sm:text-sm rounded-lg cursor-pointer"
-                        >
-                          Settle ₱{req.unpaidAmount} via GCash
-                        </button>
+                      {req.unpaidAmount > 0 ? (
+                        gcashEnabled ? (
+                          <button
+                            type="button"
+                            onClick={() => openGCashPayment(req)}
+                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs sm:text-sm rounded-lg cursor-pointer"
+                          >
+                            Settle ₱{req.unpaidAmount} via GCash
+                          </button>
+                        ) : (
+                          <span className="inline-block px-3 py-1 rounded-full text-xs sm:text-sm font-extrabold bg-amber-100 text-amber-900 border border-amber-300">
+                            {req.paymentMethod === 'Cash on Pickup'
+                              ? 'Cash due at pickup'
+                              : 'Balance unpaid'}
+                          </span>
+                        )
                       ) : (
                         <span className="inline-block px-3 py-1 rounded-full text-xs sm:text-sm font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">
                           ✓ Fully Paid
