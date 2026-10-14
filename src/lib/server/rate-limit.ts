@@ -27,7 +27,7 @@ export async function enforceRateLimit(
       $inc: { count: 1 },
       $setOnInsert: { expiresAt: new Date(windowStart + windowMs * 2) },
     },
-    { upsert: true, new: true, setDefaultsOnInsert: true },
+    { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
   ).lean();
 
   if ((document?.count ?? maxAttempts + 1) > maxAttempts) {
