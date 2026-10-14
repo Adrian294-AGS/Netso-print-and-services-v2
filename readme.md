@@ -143,6 +143,11 @@ it from the admin dashboard after the owner's PayMongo and GCash account setup i
 complete. Customers can still place orders using Cash on Pickup; those orders can be
 confirmed before payment, while the outstanding balance remains due at pickup.
 
+The lead administrator's **User Activity Logs** view records successful sign-ins and
+server-confirmed account, order, payment, file, chat, staff, and service actions.
+Logs are loaded in pages so older events remain accessible beyond the first 100.
+Events are recorded from deployment onward; existing activity cannot be reconstructed.
+
 ### Local setup
 
 1. Copy `.env.example` to `.env` and replace the placeholder credentials. Keep `.env`

@@ -9,6 +9,7 @@ import { isStaffRole, requireSession, type SessionUser } from '@/lib/server/auth
 import { apiErrorResponse, ApiError, assertSameOrigin, readJson } from '@/lib/server/http';
 import { mysqlPool, queryRows } from '@/lib/server/mysql';
 import { isGCashPaymentEnabled } from '@/lib/server/payment-settings';
+import { recordAuditEvent } from '@/lib/server/audit';
 
 export const runtime = 'nodejs';
 
@@ -176,6 +177,11 @@ export async function DELETE(request: NextRequest) {
       [order.ID],
     );
     await connection.commit();
+    await recordAuditEvent(request, user, {
+      category: 'Order Management',
+      action: 'Deleted service request',
+      targetId: parsed.data.orderId,
+    });
     publishRealtimeEvent({
       topic: 'orders',
       orderId: parsed.data.orderId,
@@ -347,6 +353,12 @@ export async function POST(request: NextRequest) {
       [insertId, user.id],
     );
     await connection.commit();
+    await recordAuditEvent(request, user, {
+      category: 'Order Management',
+      action: input.walkIn ? 'Created walk-in service request' : 'Placed service request',
+      details: `${service.service_name}; ${input.paymentMethod}; total ₱${total.toFixed(2)}.`,
+      targetId: orderNumber,
+    });
     publishRealtimeEvent({
       topic: 'orders',
       orderId: orderNumber,
@@ -447,6 +459,12 @@ export async function PATCH(request: NextRequest) {
       [order.ID, order.status, statusResult.data, note || null, user.id],
     );
     await connection.commit();
+    await recordAuditEvent(request, user, {
+      category: 'Order Management',
+      action: `Updated order status to ${statusResult.data}`,
+      details: note,
+      targetId: orderNumber,
+    });
     publishRealtimeEvent({
       topic: 'orders',
       orderId: orderNumber,

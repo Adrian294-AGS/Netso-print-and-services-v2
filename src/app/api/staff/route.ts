@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { requireSession } from '@/lib/server/auth';
 import { ApiError, apiErrorResponse, assertSameOrigin, readJson } from '@/lib/server/http';
 import { mysqlPool, queryRows } from '@/lib/server/mysql';
+import { recordAuditEvent } from '@/lib/server/audit';
 
 export const runtime = 'nodejs';
 
@@ -92,7 +93,7 @@ export async function POST(request: NextRequest) {
   const connection = await mysqlPool.getConnection();
   try {
     assertSameOrigin(request);
-    await requireSession(request, ['lead_admin']);
+    const user = await requireSession(request, ['lead_admin']);
     const parsed = staffSchema.safeParse(await readJson(request));
     if (!parsed.success) throw new ApiError(400, 'Staff account details are invalid.');
     const input = parsed.data;
@@ -130,6 +131,12 @@ export async function POST(request: NextRequest) {
     );
     await connection.commit();
 
+    await recordAuditEvent(request, user, {
+      category: 'Account / System',
+      action: 'Created staff account',
+      details: `${input.name} registered as ${input.role}.`,
+      targetId: staffCode,
+    });
     return NextResponse.json(
       {
         ok: true,
@@ -166,7 +173,7 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     assertSameOrigin(request);
-    await requireSession(request, ['lead_admin']);
+    const user = await requireSession(request, ['lead_admin']);
     const parsed = z.object({
       id: z.string().trim().min(1).max(32),
       status: z.enum(['Online', 'In Production', 'Off Duty']),
@@ -191,6 +198,11 @@ export async function PATCH(request: NextRequest) {
       );
       if (!rows.length) throw new ApiError(404, 'Staff account not found.');
     }
+    await recordAuditEvent(request, user, {
+      category: 'Account / System',
+      action: `Updated staff status to ${parsed.data.status}`,
+      targetId: parsed.data.id,
+    });
     return NextResponse.json({ ok: true });
   } catch (error) {
     return apiErrorResponse(error);

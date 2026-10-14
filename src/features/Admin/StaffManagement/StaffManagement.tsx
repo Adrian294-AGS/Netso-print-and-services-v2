@@ -17,7 +17,10 @@ import { AdminUserLogsTab } from '../AdminUserLogsTab';
 
 interface StaffManagementProps {
   userLogs: UserLogEntry[];
-  onAddUserLog?: (entry: Omit<UserLogEntry, 'id' | 'timestamp' | 'date'>) => void;
+  userLogsTotal: number;
+  userLogsPage: number;
+  userLogsLoading: boolean;
+  onUserLogsPageChange: (page: number) => void;
   defaultSubView?: 'roster' | 'logs';
   activeOperator?: StaffMember;
   highContrastMode: boolean;
@@ -26,7 +29,10 @@ interface StaffManagementProps {
 
 export function StaffManagement({
   userLogs,
-  onAddUserLog,
+  userLogsTotal,
+  userLogsPage,
+  userLogsLoading,
+  onUserLogsPageChange,
   defaultSubView = 'roster',
   activeOperator,
   highContrastMode,
@@ -83,18 +89,6 @@ export function StaffManagement({
       setStaffList((previous) =>
         previous.map((item) => item.id === staff.id ? { ...item, status: nextStatus } : item)
       );
-      onAddUserLog?.({
-        actorName: activeOperator?.name ?? '',
-        actorUsername: activeOperator?.username ?? '',
-        actorRole: 'Admin',
-        category: 'Account / System',
-        action: `Updated Operator Status -> ${nextStatus}`,
-        details: `Changed shift availability of ${staff.name} (@${staff.username}) to ${nextStatus}.`,
-        targetId: staff.id,
-        ipAddress: '',
-        device: '',
-        status: 'Verified',
-      });
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : 'Unable to update staff status.');
     }
@@ -141,18 +135,6 @@ export function StaffManagement({
       if (!response.ok) throw new Error(result.error || 'Unable to create staff account.');
       const createdOp = result.staff as StaffMember;
       setStaffList((previous) => [createdOp, ...previous]);
-      onAddUserLog?.({
-        actorName: activeOperator?.name ?? '',
-        actorUsername: activeOperator?.username ?? '',
-        actorRole: 'Admin',
-        category: 'Account / System',
-        action: 'Added New Admin/Staff Operator',
-        details: `Registered ${createdOp.name} (@${createdOp.username}) as ${createdOp.role}.`,
-        targetId: createdOp.id,
-        ipAddress: '',
-        device: '',
-        status: 'Verified',
-      });
       setNewOpName('');
       setNewOpUsername('');
       setNewOpEmail('');
@@ -216,7 +198,7 @@ export function StaffManagement({
               }`}
             >
               <Activity className="w-3.5 h-3.5" />
-              <span>User Activity Logs ({userLogs.length})</span>
+              <span>User Activity Logs ({userLogsTotal})</span>
             </button>
           </div>
 
@@ -236,6 +218,10 @@ export function StaffManagement({
       {subView === 'logs' ? (
         <AdminUserLogsTab
           logs={userLogs}
+          total={userLogsTotal}
+          page={userLogsPage}
+          loading={userLogsLoading}
+          onPageChange={onUserLogsPageChange}
           highContrastMode={highContrastMode}
           fontSizeLevel={fontSizeLevel}
         />

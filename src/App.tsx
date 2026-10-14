@@ -33,7 +33,7 @@ export interface AppProps {
 }
 
 type ApiResult<T> = { ok: boolean; error?: string } & T;
-type RealtimeTopic = 'orders' | 'payments' | 'messages' | 'services';
+type RealtimeTopic = 'orders' | 'payments' | 'messages' | 'services' | 'logs';
 type RealtimeNotification = {
   id: string;
   time: string;
@@ -65,10 +65,29 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
   const [payments, setPayments] = useState<PaymentTransaction[]>([]);
   const [threads, setThreads] = useState<MessageThread[]>([]);
   const [userLogs, setUserLogs] = useState<UserLogEntry[]>([]);
+  const [userLogsTotal, setUserLogsTotal] = useState(0);
+  const [userLogsPage, setUserLogsPage] = useState(1);
+  const [userLogsLoading, setUserLogsLoading] = useState(false);
   const [notifications, setNotifications] = useState<RealtimeNotification[]>([]);
   const [liveNotice, setLiveNotice] = useState('');
   const [serviceRevision, setServiceRevision] = useState(0);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const loadAuditLogs = async (page: number) => {
+    setUserLogsLoading(true);
+    try {
+      const result = await apiRequest<{
+        logs: UserLogEntry[];
+        total: number;
+        page: number;
+      }>(`/api/logs?page=${page}&limit=50`);
+      setUserLogs(result.logs);
+      setUserLogsTotal(result.total);
+      setUserLogsPage(result.page);
+    } finally {
+      setUserLogsLoading(false);
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -99,13 +118,10 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
         if (user.role === 'admin' || user.role === 'staff') {
           const canReviewPayments =
             user.staffRole === 'lead_admin' || user.staffRole === 'front_desk_cashier';
-          const [paymentResult, logsResult, threadResult, customerResult] = await Promise.all([
+          const [paymentResult, threadResult, customerResult] = await Promise.all([
             canReviewPayments
               ? apiRequest<{ payments: PaymentTransaction[] }>('/api/payments')
               : Promise.resolve({ ok: true, payments: [] as PaymentTransaction[] }),
-            user.staffRole === 'lead_admin'
-              ? apiRequest<{ logs: UserLogEntry[] }>('/api/logs?limit=100')
-              : Promise.resolve({ ok: true, logs: [] as UserLogEntry[] }),
             apiRequest<{ threads: MessageThread[] }>('/api/messages'),
             user.role === 'admin'
               ? apiRequest<{ customers: CustomerRecord[] }>('/api/customers')
@@ -113,9 +129,11 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
           ]);
           if (!active) return;
           setPayments(paymentResult.payments);
-          setUserLogs(logsResult.logs);
           setThreads(threadResult.threads);
           setCustomers(customerResult.customers);
+          if (user.staffRole === 'lead_admin') {
+            await loadAuditLogs(1);
+          }
         }
       } catch (error) {
         console.error('Unable to load persistent portal data:', error);
@@ -136,11 +154,17 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
 
     const refreshForEvent = async (topic: RealtimeTopic) => {
       try {
-        const tasks: Promise<void>[] = [
-          apiRequest<{ orders: RequestOrder[] }>('/api/orders').then(({ orders: next }) => {
-            setRequests(next);
-          }),
-        ];
+        const tasks: Promise<void>[] = [];
+        if (topic !== 'logs') {
+          tasks.push(
+            apiRequest<{ orders: RequestOrder[] }>('/api/orders').then(({ orders: next }) => {
+              setRequests(next);
+            }),
+          );
+        }
+        if (user.staffRole === 'lead_admin' && topic === 'logs') {
+          tasks.push(loadAuditLogs(1));
+        }
         if (
           (user.staffRole === 'lead_admin' || user.staffRole === 'front_desk_cashier') &&
           (topic === 'payments' || topic === 'orders')
@@ -198,7 +222,7 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
         if (
           event.type !== 'invalidate' ||
           !event.topic ||
-          !['orders', 'payments', 'messages', 'services'].includes(event.topic)
+          !['orders', 'payments', 'messages', 'services', 'logs'].includes(event.topic)
         ) {
           return;
         }
@@ -239,16 +263,11 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
     setRequests(result.orders);
   };
 
-  const handleAddUserLog = (entry: Omit<UserLogEntry, 'id' | 'timestamp' | 'date'>) => {
-    void apiRequest('/api/logs', {
-      method: 'POST',
-      body: JSON.stringify({
-        category: entry.category,
-        action: entry.action,
-        details: entry.details,
-        targetId: entry.targetId,
-      }),
-    }).catch((error: unknown) => console.error('Unable to save audit log:', error));
+  const handleUserLogsPageChange = (page: number) => {
+    void loadAuditLogs(page).catch((error: unknown) => {
+      console.error('Unable to load audit log page:', error);
+      window.alert(error instanceof Error ? error.message : 'Unable to load audit logs.');
+    });
   };
 
   const handleUpdateOrderStatus = async (
@@ -263,18 +282,6 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
         body: JSON.stringify({ orderId, status: newStatus, progressStage: newStage, adminNote }),
       });
       await refreshOrders();
-      handleAddUserLog({
-        actorName: '',
-        actorUsername: '',
-        actorRole: 'Admin',
-        category: 'Order Management',
-        action: `Updated status to ${newStatus}`,
-        details: adminNote ?? '',
-        targetId: orderId,
-        ipAddress: '',
-        device: '',
-        status: 'Success',
-      });
     } catch (error) {
       console.error('Unable to update order status:', error);
       window.alert(
@@ -379,6 +386,8 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
         setCustomers([]);
         setThreads([]);
         setUserLogs([]);
+        setUserLogsTotal(0);
+        setUserLogsPage(1);
         setNotifications([]);
       });
   };
@@ -408,7 +417,6 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
           serviceRevision={serviceRevision}
           requests={requests}
           setRequests={setRequests}
-          onAddUserLog={handleAddUserLog}
           fontSizeLevel={fontSizeLevel}
           setFontSizeLevel={setFontSizeLevel}
           highContrastMode={highContrastMode}
@@ -429,6 +437,10 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
         payments={payments}
         threads={threads}
         userLogs={userLogs}
+        userLogsTotal={userLogsTotal}
+        userLogsPage={userLogsPage}
+        userLogsLoading={userLogsLoading}
+        onUserLogsPageChange={handleUserLogsPageChange}
         notifications={notifications}
         setNotifications={setNotifications}
         initialTab={adminTab || 'dashboard'}
@@ -437,7 +449,6 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
         onRecordPayment={handleRecordPayment}
         onSendAdminReply={handleSendAdminReply}
         onCreateWalkInOrder={handleCreateWalkInOrder}
-        onAddUserLog={handleAddUserLog}
         fontSizeLevel={fontSizeLevel}
         setFontSizeLevel={setFontSizeLevel}
         highContrastMode={highContrastMode}

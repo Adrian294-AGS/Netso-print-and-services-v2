@@ -36,7 +36,6 @@ import {
   RequestOrder,
   UploadedFile,
   FontSizeLevel,
-  UserLogEntry,
 } from '../../types/portal';
 import { Header } from '../../components/Header';
 import { Sidebar } from '../../components/Sidebar';
@@ -352,7 +351,6 @@ export interface CustomerPortalProps {
   onLogout: () => void;
   requests: RequestOrder[];
   setRequests: React.Dispatch<React.SetStateAction<RequestOrder[]>>;
-  onAddUserLog?: (entry: Omit<UserLogEntry, 'id' | 'timestamp' | 'date'>) => void;
   onSwitchToAdminPortal?: () => void;
 }
 
@@ -365,14 +363,10 @@ export function CustomerPortal({
   onLogout,
   requests: externalRequests,
   setRequests: externalSetRequests,
-  onAddUserLog,
 }: CustomerPortalProps) {
   const requests = externalRequests;
   const setRequests = externalSetRequests;
 
-  const recordUserLog = (entry: Omit<UserLogEntry, 'id' | 'timestamp' | 'date'>) => {
-    if (onAddUserLog) onAddUserLog(entry);
-  };
   const displayUserName = currentUser.name || currentUser.username || currentUser.email;
   const [serviceCatalog, setServiceCatalog] = useState<CustomerServiceItem[]>([]);
   const [activeTab, setActiveTab] = useState<CustomerTabId>(initialTab);
@@ -762,18 +756,6 @@ export function CustomerPortal({
 
   const confirmLogout = () => {
     setIsLogoutModalOpen(false);
-    recordUserLog({
-      actorName: sessionUserName || displayUserName,
-      actorUsername: currentUser.username,
-      actorRole: 'Customer',
-      category: 'Authentication',
-      action: 'Customer Session Sign-Out',
-      details: `Customer ${sessionUserName || displayUserName} signed out of Customer Portal.`,
-      targetId: currentUser.id,
-      ipAddress: '',
-      device: '',
-      status: 'Success',
-    });
     onLogout?.();
   };
 

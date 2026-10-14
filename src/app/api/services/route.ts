@@ -5,6 +5,7 @@ import { requireSession } from '@/lib/server/auth';
 import { apiErrorResponse, ApiError, assertSameOrigin, readJson } from '@/lib/server/http';
 import { mysqlPool, queryRows } from '@/lib/server/mysql';
 import { publishRealtimeEvent } from '@/lib/server/realtime';
+import { recordAuditEvent } from '@/lib/server/audit';
 
 export const runtime = 'nodejs';
 
@@ -42,7 +43,7 @@ export async function GET() {
 export async function PATCH(request: NextRequest) {
   try {
     assertSameOrigin(request);
-    await requireSession(request, ['lead_admin']);
+    const user = await requireSession(request, ['lead_admin']);
     const body = await readJson(request);
     const parsed = z.object({
       id: z.string().trim().min(1).max(50),
@@ -67,6 +68,12 @@ export async function PATCH(request: NextRequest) {
       );
       if (!rows.length) throw new ApiError(404, 'Service not found.');
     }
+    await recordAuditEvent(request, user, {
+      category: 'Account / System',
+      action: 'Updated service catalog',
+      details: `${id}${basePrice === undefined ? '' : `; price ₱${basePrice.toFixed(2)}`}${available === undefined ? '' : `; ${available ? 'available' : 'unavailable'}`}.`,
+      targetId: id,
+    });
     publishRealtimeEvent({ topic: 'services', targetRoles: ['customer'] });
     return NextResponse.json({ ok: true });
   } catch (error) {

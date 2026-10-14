@@ -7,6 +7,7 @@ import { apiErrorResponse, ApiError, assertSameOrigin, readJson } from '@/lib/se
 import { getB2 } from '@/lib/server/b2';
 import { mysqlPool, queryRows } from '@/lib/server/mysql';
 import { publishRealtimeEvent } from '@/lib/server/realtime';
+import { recordAuditEvent } from '@/lib/server/audit';
 
 export const runtime = 'nodejs';
 
@@ -56,6 +57,12 @@ export async function POST(request: NextRequest) {
        VALUES (?, ?, ?, ?, ?, ?)`,
       [order.ID, request.headers.get('x-file-name')?.slice(0, 255) || fileName, extension, object.ContentType ?? null, object.ContentLength, key],
     );
+    await recordAuditEvent(request, user, {
+      category: 'File Artwork',
+      action: 'Uploaded artwork file',
+      details: `${request.headers.get('x-file-name')?.slice(0, 255) || fileName} (${object.ContentLength} bytes).`,
+      targetId: orderId,
+    });
     publishRealtimeEvent({
       topic: 'orders',
       orderId,

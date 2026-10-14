@@ -6,6 +6,7 @@ import { createSessionToken, setSessionCookie, type SessionUser } from '@/lib/se
 import { getGoogleOAuthEnv } from '@/lib/server/env';
 import { ApiError } from '@/lib/server/http';
 import { mysqlPool, queryRows } from '@/lib/server/mysql';
+import { recordAuditEvent } from '@/lib/server/audit';
 
 export const runtime = 'nodejs';
 
@@ -143,6 +144,10 @@ export async function GET(request: NextRequest) {
     const response = NextResponse.redirect(new URL('/customer', config.appUrl));
     setSessionCookie(response, await createSessionToken(user));
     clearOAuthCookies(response);
+    await recordAuditEvent(request, user, {
+      category: 'Authentication',
+      action: 'Signed in with Google OAuth',
+    });
     return response;
   } catch (error) {
     const response = NextResponse.redirect(

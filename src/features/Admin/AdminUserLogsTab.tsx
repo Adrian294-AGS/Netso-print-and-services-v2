@@ -24,12 +24,20 @@ import {
 
 interface AdminUserLogsTabProps {
   logs: UserLogEntry[];
+  total: number;
+  page: number;
+  loading: boolean;
+  onPageChange: (page: number) => void;
   highContrastMode: boolean;
   fontSizeLevel: FontSizeLevel;
 }
 
 export function AdminUserLogsTab({
   logs,
+  total,
+  page,
+  loading,
+  onPageChange,
   highContrastMode,
   fontSizeLevel,
 }: AdminUserLogsTabProps) {
@@ -185,8 +193,8 @@ export function AdminUserLogsTab({
             <span className="text-[10px] sm:text-[11px] font-extrabold uppercase text-zinc-500">TOTAL LOG EVENTS</span>
             <Activity className="w-4 h-4 text-[#B8860B]" />
           </div>
-          <span className="font-mono font-black text-xl sm:text-2xl block">{logs.length}</span>
-          <span className="text-[11px] text-emerald-700 font-bold">● Live Session Tracking</span>
+          <span className="font-mono font-black text-xl sm:text-2xl block">{total}</span>
+          <span className="text-[11px] text-emerald-700 font-bold">All recorded audit events</span>
         </div>
 
         <div
@@ -199,7 +207,7 @@ export function AdminUserLogsTab({
             <Lock className="w-4 h-4 text-blue-600" />
           </div>
           <span className="font-mono font-black text-xl sm:text-2xl block">{authEventsCount}</span>
-          <span className="text-[11px] text-zinc-500 font-semibold">user / google oauth account</span>
+          <span className="text-[11px] text-zinc-500 font-semibold">On this page · user / Google OAuth</span>
         </div>
 
         <div
@@ -212,7 +220,7 @@ export function AdminUserLogsTab({
             <User className="w-4 h-4 text-emerald-600" />
           </div>
           <span className="font-mono font-black text-xl sm:text-2xl block">{customerEventsCount}</span>
-          <span className="text-[11px] text-zinc-500 font-semibold">Orders, files & GCash</span>
+          <span className="text-[11px] text-zinc-500 font-semibold">On this page · orders, files & GCash</span>
         </div>
 
         <div
@@ -225,7 +233,7 @@ export function AdminUserLogsTab({
             <ShieldCheck className="w-4 h-4 text-[#B8860B]" />
           </div>
           <span className="font-mono font-black text-xl sm:text-2xl block">{adminEventsCount}</span>
-          <span className="text-[11px] text-zinc-500 font-semibold">Queue & payment approvals</span>
+          <span className="text-[11px] text-zinc-500 font-semibold">On this page · queue & payment approvals</span>
         </div>
       </div>
 
@@ -276,6 +284,7 @@ export function AdminUserLogsTab({
               'GCash Payment',
               'File Artwork',
               'Staff Chat',
+              'Account / System',
             ] as const
           ).map((cat) => (
             <button
@@ -457,6 +466,34 @@ export function AdminUserLogsTab({
             </div>
           );
         })}
+      </div>
+
+      <div className="flex flex-col gap-3 rounded-xl border border-zinc-300 bg-white p-3 text-zinc-900 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs font-semibold text-zinc-600">
+          Showing {total === 0 ? 0 : (page - 1) * 50 + 1}–{Math.min(page * 50, total)} of {total} events
+          {loading ? ' · Loading…' : ''}
+        </p>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onPageChange(page - 1)}
+            disabled={page <= 1 || loading}
+            className="rounded-lg border border-zinc-300 px-3 py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Previous
+          </button>
+          <span className="text-xs font-bold">
+            Page {page} of {Math.max(1, Math.ceil(total / 50))}
+          </span>
+          <button
+            type="button"
+            onClick={() => onPageChange(page + 1)}
+            disabled={page >= Math.ceil(total / 50) || loading}
+            className="rounded-lg border border-zinc-300 px-3 py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Next
+          </button>
+        </div>
       </div>
     </div>
   );

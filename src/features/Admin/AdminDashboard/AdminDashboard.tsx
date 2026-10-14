@@ -21,6 +21,7 @@ import { StatusCard } from '../../../components/StatusCard';
 interface AdminDashboardProps {
   requests: RequestOrder[];
   userLogs: UserLogEntry[];
+  userLogsTotal: number;
   stats: {
     totalRequests: number;
     pending: number;
@@ -47,6 +48,7 @@ interface AdminDashboardProps {
 export function AdminDashboard({
   requests,
   userLogs,
+  userLogsTotal,
   stats,
   onOpenWalkInModal,
   onNavigateTab,
@@ -430,7 +432,7 @@ export function AdminDashboard({
               onClick={() => onNavigateTab('logs')}
               className="w-full py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-950 font-extrabold text-xs sm:text-sm uppercase rounded-xl border border-amber-300 cursor-pointer"
             >
-              View All {userLogs.length} User Log Entries →
+              View All {userLogsTotal} User Log Entries →
             </button>
           </div>
         </div>

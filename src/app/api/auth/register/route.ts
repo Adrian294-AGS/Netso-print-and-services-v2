@@ -7,6 +7,7 @@ import { createSessionToken, displayUser, setSessionCookie, type SessionUser } f
 import { assertSameOrigin, apiErrorResponse, ApiError, readJson } from '@/lib/server/http';
 import { mysqlPool, queryRows } from '@/lib/server/mysql';
 import { enforceRateLimit } from '@/lib/server/rate-limit';
+import { recordAuditEvent } from '@/lib/server/audit';
 
 export const runtime = 'nodejs';
 
@@ -55,6 +56,10 @@ export async function POST(request: NextRequest) {
     };
     const response = NextResponse.json({ ok: true, user: displayUser(user) }, { status: 201 });
     setSessionCookie(response, await createSessionToken(user));
+    await recordAuditEvent(request, user, {
+      category: 'Authentication',
+      action: 'Registered account with email and password',
+    });
     return response;
   } catch (error) {
     if (error instanceof Error && 'code' in error && error.code === 'ER_DUP_ENTRY') {

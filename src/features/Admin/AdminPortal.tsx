@@ -65,6 +65,10 @@ interface AdminPortalProps {
   payments: PaymentTransaction[];
   threads: MessageThread[];
   userLogs: UserLogEntry[];
+  userLogsTotal: number;
+  userLogsPage: number;
+  userLogsLoading: boolean;
+  onUserLogsPageChange: (page: number) => void;
   notifications: Array<{ id: string; time: string; text: string; unread: boolean }>;
   setNotifications: React.Dispatch<React.SetStateAction<Array<{ id: string; time: string; text: string; unread: boolean }>>>;
   onUpdateOrderStatus: (
@@ -84,7 +88,6 @@ interface AdminPortalProps {
     paidAmount: number,
     notes: string
   ) => void;
-  onAddUserLog: (entry: Omit<UserLogEntry, 'id' | 'timestamp' | 'date'>) => void;
   fontSizeLevel: FontSizeLevel;
   setFontSizeLevel: (level: FontSizeLevel) => void;
   highContrastMode: boolean;
@@ -100,6 +103,10 @@ export function AdminPortal({
   payments,
   threads,
   userLogs,
+  userLogsTotal,
+  userLogsPage,
+  userLogsLoading,
+  onUserLogsPageChange,
   notifications,
   setNotifications,
   onUpdateOrderStatus,
@@ -107,7 +114,6 @@ export function AdminPortal({
   onRecordPayment,
   onSendAdminReply,
   onCreateWalkInOrder,
-  onAddUserLog,
   fontSizeLevel,
   highContrastMode,
   onLogout,
@@ -259,18 +265,6 @@ export function AdminPortal({
   };
 
   const handleAdminLogout = () => {
-    onAddUserLog({
-      actorName: `${activeOperator.name} (${activeOperator.role})`,
-      actorUsername: activeOperator.username,
-      actorRole: activeOperator.role === 'Lead Admin' ? 'Admin' : 'Operator',
-      category: 'Authentication',
-      action: 'Admin Portal Sign-Out',
-      details: `Operator ${activeOperator.name} ended active session.`,
-      targetId: 'SESSION-ADM',
-      ipAddress: '112.198.44.102',
-      device: 'Admin Service Desk · Santiago City',
-      status: 'Success',
-    });
     setIsLogoutModalOpen(false);
     onLogout?.();
   };
@@ -303,7 +297,7 @@ export function AdminPortal({
     { id: 'payments', label: 'GCash Payments', icon: Wallet, badge: stats.unverifiedPayments },
     { id: 'customers', label: 'Customers', icon: Users },
     { id: 'staff', label: 'Admin Operators', icon: UserCheck },
-    { id: 'logs', label: 'User Logs', icon: ShieldCheck, badge: userLogs.length },
+    { id: 'logs', label: 'User Logs', icon: ShieldCheck, badge: userLogsTotal },
     { id: 'services', label: 'Services', icon: Printer },
     { id: 'reports', label: 'Reports', icon: BarChart3 },
     { id: 'notifications', label: 'Staff Chat', icon: MessageSquare, badge: stats.unreadMsgs },
@@ -354,7 +348,7 @@ export function AdminPortal({
       label: 'User Activity Logs',
       desc: 'Sign-ins & audit trail',
       icon: ShieldCheck,
-      badge: userLogs.length,
+      badge: userLogsTotal,
     },
     {
       id: 'services',
@@ -451,6 +445,7 @@ export function AdminPortal({
               onNavigateTab={handleNavigateTab}
               onUpdateOrderStatus={onUpdateOrderStatus}
               onSelectOrder={(ord) => setSelectedOrderForDetails(ord)}
+              userLogsTotal={userLogsTotal}
               isLeadAdmin={isLeadAdmin}
               gcashEnabled={gcashEnabled}
               gcashSettingsLoaded={gcashSettingsLoaded}
@@ -509,7 +504,10 @@ export function AdminPortal({
             <StaffManagement
               key={activeTab === 'logs' ? 'logs' : 'staff'}
               userLogs={userLogs}
-              onAddUserLog={onAddUserLog}
+              userLogsTotal={userLogsTotal}
+              userLogsPage={userLogsPage}
+              userLogsLoading={userLogsLoading}
+              onUserLogsPageChange={onUserLogsPageChange}
               defaultSubView={activeTab === 'logs' ? 'logs' : 'roster'}
               activeOperator={activeOperator}
               highContrastMode={highContrastMode}

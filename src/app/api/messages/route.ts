@@ -8,6 +8,7 @@ import { connectMongoDB } from '@/lib/server/mongodb';
 import { mysqlPool, queryRows } from '@/lib/server/mysql';
 import { enforceRateLimit } from '@/lib/server/rate-limit';
 import { publishRealtimeEvent } from '@/lib/server/realtime';
+import { recordAuditEvent } from '@/lib/server/audit';
 
 export const runtime = 'nodejs';
 
@@ -86,6 +87,11 @@ export async function POST(request: NextRequest) {
       },
       { upsert: true, returnDocument: 'after', runValidators: true, setDefaultsOnInsert: true },
     ).lean();
+    await recordAuditEvent(request, user, {
+      category: 'Staff Chat',
+      action: isStaffRole(user.role) ? 'Replied to order conversation' : 'Sent message to staff',
+      targetId: orderId,
+    });
     publishRealtimeEvent({
       topic: 'messages',
       orderId,

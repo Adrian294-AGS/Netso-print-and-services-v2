@@ -6,6 +6,7 @@ import { isStaffRole, requireSession } from '@/lib/server/auth';
 import { apiErrorResponse, ApiError, assertSameOrigin, readJson } from '@/lib/server/http';
 import { mysqlPool, queryRows } from '@/lib/server/mysql';
 import { publishRealtimeEvent } from '@/lib/server/realtime';
+import { recordAuditEvent } from '@/lib/server/audit';
 
 export const runtime = 'nodejs';
 
@@ -178,6 +179,12 @@ export async function POST(request: NextRequest) {
       ],
     );
     await connection.commit();
+    await recordAuditEvent(request, user, {
+      category: 'GCash Payment',
+      action: 'Submitted payment for review',
+      details: `${payment.method}; ₱${payment.amount.toFixed(2)}.`,
+      targetId: order.order_number,
+    });
     publishRealtimeEvent({
       topic: 'payments',
       orderId: order.order_number,
@@ -311,6 +318,13 @@ export async function PATCH(request: NextRequest) {
     }
 
     await connection.commit();
+    await recordAuditEvent(request, user, {
+      category: 'GCash Payment',
+      action: result.data === 'verified' ? 'Verified payment' : 'Flagged payment',
+      details: `Payment ${paymentId}; ₱${Number(payment.amount).toFixed(2)}.`,
+      targetId: payment.order_number,
+      status: result.data === 'verified' ? 'Verified' : 'Warning',
+    });
     publishRealtimeEvent({
       topic: 'payments',
       orderId: payment.order_number,

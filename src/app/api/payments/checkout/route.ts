@@ -8,6 +8,7 @@ import { apiErrorResponse, ApiError, assertSameOrigin, readJson } from '@/lib/se
 import { getPayMongoEnv } from '@/lib/server/env';
 import { mysqlPool, queryRows } from '@/lib/server/mysql';
 import { isGCashPaymentEnabled } from '@/lib/server/payment-settings';
+import { recordAuditEvent } from '@/lib/server/audit';
 
 export const runtime = 'nodejs';
 
@@ -283,6 +284,12 @@ export async function POST(request: NextRequest) {
         ],
       );
 
+      await recordAuditEvent(request, user, {
+        category: 'GCash Payment',
+        action: 'Started GCash checkout',
+        details: `₱${(amountCentavos / 100).toFixed(2)}.`,
+        targetId: orderNumber,
+      });
       return NextResponse.json({
         ok: true,
         checkoutUrl: checkoutUrl.toString(),

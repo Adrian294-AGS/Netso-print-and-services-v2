@@ -1,6 +1,6 @@
 import 'server-only';
 
-export type RealtimeTopic = 'orders' | 'payments' | 'messages' | 'services';
+export type RealtimeTopic = 'orders' | 'payments' | 'messages' | 'services' | 'logs';
 
 export interface RealtimeEvent {
   topic: RealtimeTopic;
