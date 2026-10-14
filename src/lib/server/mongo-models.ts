@@ -16,6 +16,8 @@ const threadSchema = new Schema(
   {
     orderNumber: { type: String, required: true, unique: true, index: true },
     customerId: { type: String, required: true, index: true },
+    customerName: { type: String, default: null, maxlength: 150 },
+    customerUsername: { type: String, default: '', maxlength: 50 },
     status: { type: String, enum: ['UNREAD', 'Replied', 'Closed'], default: 'UNREAD' },
     messages: { type: [messageSchema], default: [] },
   },

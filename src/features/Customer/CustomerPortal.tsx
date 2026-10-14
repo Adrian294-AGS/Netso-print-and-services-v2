@@ -343,6 +343,7 @@ function FileUploader({ files, onChange, theme = 'light' }: FileUploaderProps) {
 export interface CustomerPortalProps {
   currentUser: { id: string; name: string; username: string; email: string };
   serviceRevision?: number;
+  messageRevision?: number;
   initialTab?: 'dashboard' | 'services' | 'requests' | 'payments' | 'messages' | 'profile';
   fontSizeLevel?: FontSizeLevel;
   setFontSizeLevel?: React.Dispatch<React.SetStateAction<FontSizeLevel>> | ((level: FontSizeLevel) => void);
@@ -357,6 +358,7 @@ export interface CustomerPortalProps {
 export function CustomerPortal({
   currentUser,
   serviceRevision = 0,
+  messageRevision = 0,
   initialTab = 'dashboard',
   fontSizeLevel = 'large',
   highContrastMode = false,
@@ -490,16 +492,18 @@ export function CustomerPortal({
 
   React.useEffect(() => {
     const orderId = customerRequests[0]?.id;
-    if (!orderId) return;
     let active = true;
-    void fetch(`/api/messages?orderId=${encodeURIComponent(orderId)}`)
+    const endpoint = orderId
+      ? `/api/messages?orderId=${encodeURIComponent(orderId)}`
+      : '/api/messages';
+    void fetch(endpoint)
       .then(async (response) => {
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'Unable to load messages.');
-        if (active && result.thread?.messages) {
+        if (active) {
           setMessageState({
-            orderId,
-            messages: result.thread.messages.map((message: {
+            orderId: orderId ?? '',
+            messages: (result.thread?.messages ?? []).map((message: {
               sender: string;
               text: string;
               time: string;
@@ -512,7 +516,7 @@ export function CustomerPortal({
     return () => {
       active = false;
     };
-  }, [customerRequests]);
+  }, [customerRequests, messageRevision]);
 
   const totalPaid = useMemo(
     () => customerRequests.reduce((sum, r) => sum + r.paidAmount, 0),
@@ -729,12 +733,12 @@ export function CustomerPortal({
 
   const handleSendMessage = async () => {
     const orderId = customerRequests[0]?.id;
-    if (!newMessageInput.trim() || !orderId) return;
+    if (!newMessageInput.trim()) return;
     try {
       const response = await fetch('/api/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId, text: newMessageInput.trim() }),
+        body: JSON.stringify({ ...(orderId ? { orderId } : {}), text: newMessageInput.trim() }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Unable to send message.');
@@ -1568,6 +1572,13 @@ export function CustomerPortal({
           {activeTab === 'messages' && (
             <div className="border rounded-2xl p-5 bg-white border-zinc-300 h-[480px] flex flex-col justify-between shadow-xs">
               <div className="space-y-3.5 overflow-y-auto pr-1">
+                {messages.length === 0 && (
+                  <p className="rounded-xl border border-dashed border-zinc-300 p-4 text-center text-sm text-zinc-500">
+                    {customerRequests.length
+                      ? 'No messages in this order conversation yet. Send a message to contact staff.'
+                      : 'No order needed. Send a message to start a conversation with NETSO staff.'}
+                  </p>
+                )}
                 {messages.map((m, idx) => (
                   <div
                     key={idx}

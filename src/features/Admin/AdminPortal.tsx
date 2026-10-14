@@ -80,6 +80,8 @@ interface AdminPortalProps {
   onReviewPayment: (paymentId: string, status: 'verified' | 'flagged') => void;
   onRecordPayment: (orderId: string, amount: number) => void;
   onSendAdminReply: (threadId: string, text: string) => void;
+  onStartCustomerConversation: (customerId: string, text: string) => Promise<MessageThread>;
+  financialReportRevision: number;
   onCreateWalkInOrder: (
     customerName: string,
     customerPhone: string,
@@ -113,6 +115,8 @@ export function AdminPortal({
   onReviewPayment,
   onRecordPayment,
   onSendAdminReply,
+  onStartCustomerConversation,
+  financialReportRevision,
   onCreateWalkInOrder,
   fontSizeLevel,
   highContrastMode,
@@ -524,19 +528,20 @@ export function AdminPortal({
 
           {activeTab === 'reports' && (
             <Reports
-              requests={requests}
-              payments={payments}
               highContrastMode={highContrastMode}
               fontSizeLevel={fontSizeLevel}
+              refreshRevision={financialReportRevision}
             />
           )}
 
           {activeTab === 'notifications' && (
             <Notifications
               threads={threads}
+              customers={customers}
               selectedThreadId={activeThreadId}
               onSelectThread={setSelectedThreadId}
               onSendAdminReply={onSendAdminReply}
+              onStartCustomerConversation={onStartCustomerConversation}
               highContrastMode={highContrastMode}
               fontSizeLevel={fontSizeLevel}
             />

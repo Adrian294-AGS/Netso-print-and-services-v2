@@ -64,6 +64,7 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [payments, setPayments] = useState<PaymentTransaction[]>([]);
   const [threads, setThreads] = useState<MessageThread[]>([]);
+  const [messageRevision, setMessageRevision] = useState(0);
   const [userLogs, setUserLogs] = useState<UserLogEntry[]>([]);
   const [userLogsTotal, setUserLogsTotal] = useState(0);
   const [userLogsPage, setUserLogsPage] = useState(1);
@@ -71,6 +72,7 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
   const [notifications, setNotifications] = useState<RealtimeNotification[]>([]);
   const [liveNotice, setLiveNotice] = useState('');
   const [serviceRevision, setServiceRevision] = useState(0);
+  const [financialReportRevision, setFinancialReportRevision] = useState(0);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadAuditLogs = async (page: number) => {
@@ -228,6 +230,10 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
         }
         void refreshForEvent(event.topic);
         if (event.topic === 'services') setServiceRevision((revision) => revision + 1);
+        if (event.topic === 'messages') setMessageRevision((revision) => revision + 1);
+        if (event.topic === 'orders' || event.topic === 'payments') {
+          setFinancialReportRevision((revision) => revision + 1);
+        }
         if (event.notification?.text) {
           const notification = {
             id: `${Date.now()}-${Math.random()}`,
@@ -335,13 +341,24 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
     try {
       await apiRequest('/api/messages', {
         method: 'POST',
-        body: JSON.stringify({ orderId: targetThread.requestId, text }),
+        body: JSON.stringify({ threadId: targetThread.id, text }),
       });
       const result = await apiRequest<{ threads: MessageThread[] }>('/api/messages');
       setThreads(result.threads);
     } catch (error) {
       console.error('Unable to send staff reply:', error);
+      window.alert(error instanceof Error ? error.message : 'Unable to send staff reply.');
     }
+  };
+
+  const handleStartCustomerConversation = async (customerId: string, text: string) => {
+    const result = await apiRequest<{ thread: MessageThread }>('/api/messages', {
+      method: 'POST',
+      body: JSON.stringify({ customerId, text }),
+    });
+    const refreshed = await apiRequest<{ threads: MessageThread[] }>('/api/messages');
+    setThreads(refreshed.threads);
+    return result.thread;
   };
 
   const handleCreateWalkInOrder = async (
@@ -415,6 +432,7 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
           }}
           initialTab={customerTab || 'dashboard'}
           serviceRevision={serviceRevision}
+          messageRevision={messageRevision}
           requests={requests}
           setRequests={setRequests}
           fontSizeLevel={fontSizeLevel}
@@ -448,6 +466,8 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
         onReviewPayment={handleReviewPayment}
         onRecordPayment={handleRecordPayment}
         onSendAdminReply={handleSendAdminReply}
+        onStartCustomerConversation={handleStartCustomerConversation}
+        financialReportRevision={financialReportRevision}
         onCreateWalkInOrder={handleCreateWalkInOrder}
         fontSizeLevel={fontSizeLevel}
         setFontSizeLevel={setFontSizeLevel}

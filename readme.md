@@ -147,6 +147,14 @@ The lead administrator's **User Activity Logs** view records successful sign-ins
 server-confirmed account, order, payment, file, chat, staff, and service actions.
 Logs are loaded in pages so older events remain accessible beyond the first 100.
 Events are recorded from deployment onward; existing activity cannot be reconstructed.
+Customers can start a general staff conversation without an order, and staff can also
+start or reply to a general conversation from the messages inbox.
+
+The lead-admin financial report is calculated from MySQL records for the selected
+month. Collected revenue includes verified payments by payment date; booked value
+and current outstanding balances are grouped by order creation month, with cancelled
+orders excluded from booked totals. Completion counts use order status history.
+Pending, flagged, and failed payments are not counted as collections.
 
 ### Local setup
 

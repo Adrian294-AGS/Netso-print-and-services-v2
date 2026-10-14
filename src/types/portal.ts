@@ -110,6 +110,7 @@ export interface ChatMessage {
 export interface MessageThread {
   id: string;
   requestId: string;
+  conversationType?: 'order' | 'general';
   customerName: string;
   customerUsername: string;
   serviceName: string;

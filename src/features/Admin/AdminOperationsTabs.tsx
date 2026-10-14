@@ -673,6 +673,7 @@ interface AdminCustomersAndMessagesProps {
   selectedThreadId: string;
   onSelectThread: (id: string) => void;
   onSendAdminReply: (threadId: string, text: string) => void;
+  onStartCustomerConversation?: (customerId: string, text: string) => Promise<MessageThread>;
   onSelectCustomer: (customer: CustomerRecord) => void;
   onOpenLogout: () => void;
   highContrastMode: boolean;
@@ -686,6 +687,7 @@ export function AdminCustomersAndMessages({
   selectedThreadId,
   onSelectThread,
   onSendAdminReply,
+  onStartCustomerConversation,
   onSelectCustomer,
   onOpenLogout,
   highContrastMode,
@@ -693,6 +695,8 @@ export function AdminCustomersAndMessages({
 }: AdminCustomersAndMessagesProps) {
   const [custSearch, setCustSearch] = useState('');
   const [replyInput, setReplyInput] = useState('');
+  const [isComposingNewConversation, setIsComposingNewConversation] = useState(false);
+  const [newConversationCustomerId, setNewConversationCustomerId] = useState('');
 
   const filteredCustomers = useMemo(() => {
     const q = custSearch.toLowerCase();
@@ -708,8 +712,10 @@ export function AdminCustomersAndMessages({
   }, [customers, custSearch]);
 
   const activeThread = useMemo(
-    () => threads.find((t) => t.id === selectedThreadId) || threads[0],
-    [threads, selectedThreadId],
+    () => isComposingNewConversation
+      ? undefined
+      : threads.find((t) => t.id === selectedThreadId) || threads[0],
+    [threads, selectedThreadId, isComposingNewConversation],
   );
 
   if (mode === 'customers') {
@@ -917,8 +923,22 @@ export function AdminCustomersAndMessages({
 
   if (mode === 'messages') {
     const handleSend = () => {
-      if (!replyInput.trim() || !activeThread) return;
-
+      if (!replyInput.trim()) return;
+      if (isComposingNewConversation) {
+        if (!newConversationCustomerId || !onStartCustomerConversation) return;
+        void onStartCustomerConversation(newConversationCustomerId, replyInput.trim())
+          .then((thread) => {
+            setIsComposingNewConversation(false);
+            setNewConversationCustomerId('');
+            onSelectThread(thread.id);
+          })
+          .catch((error: unknown) => {
+            window.alert(error instanceof Error ? error.message : 'Unable to start conversation.');
+          });
+        setReplyInput('');
+        return;
+      }
+      if (!activeThread) return;
       onSendAdminReply(activeThread.id, replyInput.trim());
       setReplyInput('');
     };
@@ -948,6 +968,17 @@ export function AdminCustomersAndMessages({
             Respond to customer quote inquiries, confirm GCash receipts, and send pre-press layout proofs.
           </p>
         </div>
+        <button
+          type="button"
+          onClick={() => {
+            setIsComposingNewConversation(true);
+            setNewConversationCustomerId('');
+            setReplyInput('');
+          }}
+          className="rounded-lg border border-black bg-[#D4A017] px-3 py-2 text-xs font-extrabold text-black"
+        >
+          New conversation
+        </button>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5">
           <div className="lg:col-span-5 space-y-2">
@@ -958,7 +989,10 @@ export function AdminCustomersAndMessages({
               return (
                 <div
                   key={thr.id}
-                  onClick={() => onSelectThread(thr.id)}
+                  onClick={() => {
+                    setIsComposingNewConversation(false);
+                    onSelectThread(thr.id);
+                  }}
                   className={`p-3.5 rounded-xl border-l-4 border cursor-pointer transition-all ${
                     isSelected
                       ? 'border-l-[#D4A017] border-[#D4A017] bg-amber-50/90 text-zinc-950 shadow-sm'
@@ -997,7 +1031,7 @@ export function AdminCustomersAndMessages({
             })}
           </div>
 
-          {activeThread && (
+          {(activeThread || isComposingNewConversation) && (
             <div
               className={`lg:col-span-7 border rounded-2xl p-4 flex flex-col justify-between h-[460px] shadow-xs ${
                 highContrastMode
@@ -1008,11 +1042,13 @@ export function AdminCustomersAndMessages({
               <div className="border-b border-zinc-200 pb-2.5 flex items-center justify-between">
                 <div>
                   <span className="font-mono font-black text-xs bg-amber-100 text-black px-2 py-0.5 rounded border border-[#D4A017]">
-                    {activeThread.requestId}
+                    {activeThread?.requestId ?? 'New general conversation'}
                   </span>
 
                   <h3 className="font-extrabold text-sm mt-1">
-                    {activeThread.customerName} — {activeThread.serviceName}
+                    {activeThread
+                      ? `${activeThread.customerName} — ${activeThread.serviceName}`
+                      : 'Start a conversation with a customer'}
                   </h3>
                 </div>
 
@@ -1024,7 +1060,26 @@ export function AdminCustomersAndMessages({
               </div>
 
               <div className="space-y-2.5 overflow-y-auto py-3 pr-1 flex-1">
-                {activeThread.messages.map((m) => (
+                {isComposingNewConversation && (
+                  <label className="block text-xs font-bold">
+                    Select customer
+                    <select
+                      value={newConversationCustomerId}
+                      onChange={(event) => setNewConversationCustomerId(event.target.value)}
+                      className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm"
+                    >
+                      <option value="">Choose a customer…</option>
+                      {customers.map((customer) => (
+                        customer.totalRequests === 0 && (
+                        <option key={customer.id} value={customer.id}>
+                          {customer.firstName} {customer.lastName} (@{customer.username})
+                        </option>
+                        )
+                      ))}
+                    </select>
+                  </label>
+                )}
+                {activeThread?.messages.map((m) => (
                   <div
                     key={m.id}
                     className={`flex flex-col max-w-[85%] ${
@@ -1052,7 +1107,7 @@ export function AdminCustomersAndMessages({
 
               <div className="space-y-2 pt-2 border-t border-zinc-200">
                 <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
-                  {[
+                  {activeThread && [
                     'GCash payment verified! Moving to printing now.',
                     'Your order is Ready for Pickup at Malvar St., Victory Norte.',
                     'Yes! Updated quote has been applied to your request.',
@@ -1071,10 +1126,13 @@ export function AdminCustomersAndMessages({
                 <div className="flex gap-2">
                   <input
                     type="text"
-                    placeholder={`Reply to ${activeThread.customerName} as NETSO Admin...`}
+                    placeholder={activeThread
+                      ? `Reply to ${activeThread.customerName} as NETSO Admin...`
+                      : 'Write a message to the selected customer...'}
                     value={replyInput}
                     onChange={(e) => setReplyInput(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                    disabled={isComposingNewConversation && !newConversationCustomerId}
                     className={`flex-1 border rounded-xl px-3.5 py-2 font-semibold text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#D4A017] ${
                       highContrastMode
                         ? 'bg-black border-zinc-700 text-white placeholder-zinc-400'
@@ -1085,6 +1143,7 @@ export function AdminCustomersAndMessages({
                   <button
                     type="button"
                     onClick={handleSend}
+                    disabled={isComposingNewConversation && !newConversationCustomerId}
                     className="px-4 py-2 bg-[#D4A017] hover:bg-[#B8860B] text-black font-extrabold uppercase rounded-xl border border-black flex items-center gap-1.5 text-xs sm:text-sm shrink-0 cursor-pointer"
                   >
                     <Send className="w-4 h-4" />
