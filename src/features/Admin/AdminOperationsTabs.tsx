@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import {
   Search,
@@ -51,22 +52,32 @@ export function AdminPaymentsTab({
         .reduce((sum, payment) => sum + payment.amount, 0),
     [payments],
   );
+
   const totalOutstanding = useMemo(
     () => requests.reduce((sum, r) => sum + r.unpaidAmount, 0),
-    [requests]
+    [requests],
   );
+
   const flaggedCount = useMemo(
     () => payments.filter((payment) => payment.status === 'Flagged').length,
-    [payments]
+    [payments],
   );
+
   const pendingAmountsByOrder = useMemo(() => {
     const amounts = new Map<string, number>();
+
     for (const payment of payments) {
       if (payment.status !== 'Pending Review' && payment.status !== 'Pending') continue;
-      amounts.set(payment.requestId, (amounts.get(payment.requestId) ?? 0) + payment.amount);
+
+      amounts.set(
+        payment.requestId,
+        (amounts.get(payment.requestId) ?? 0) + payment.amount,
+      );
     }
+
     return amounts;
   }, [payments]);
+
   const availableToRecord = (order: RequestOrder) =>
     Math.max(
       0,
@@ -94,12 +105,13 @@ export function AdminPaymentsTab({
               fontSizeLevel === 'xlarge'
                 ? 'text-2xl sm:text-3xl'
                 : fontSizeLevel === 'reduced'
-                ? 'text-lg sm:text-xl'
-                : 'text-xl sm:text-2xl'
+                  ? 'text-lg sm:text-xl'
+                  : 'text-xl sm:text-2xl'
             }`}
           >
             Payments & Transactions
           </h1>
+
           <p
             className={`font-medium mt-0.5 ${
               highContrastMode ? 'text-zinc-300' : 'text-zinc-600'
@@ -110,53 +122,78 @@ export function AdminPaymentsTab({
         </div>
       </div>
 
-      {/* 4 Summary Stat Cards (matching wireframe screen-adminpayments) */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div
           className={`p-3.5 rounded-xl border border-t-4 border-t-[#D4A017] shadow-xs ${
-            highContrastMode ? 'bg-zinc-900 border-zinc-700 text-white' : 'bg-white border-zinc-300 text-zinc-950'
+            highContrastMode
+              ? 'bg-zinc-900 border-zinc-700 text-white'
+              : 'bg-white border-zinc-300 text-zinc-950'
           }`}
         >
-          <span className="text-[10px] sm:text-[11px] font-extrabold uppercase text-zinc-500 block">
+          <span className={`text-[10px] sm:text-[11px] font-extrabold uppercase block ${
+            highContrastMode ? 'text-zinc-300' : 'text-zinc-600'
+          }`}>
             TOTAL COLLECTED
           </span>
           <span className="font-mono font-black text-xl sm:text-2xl text-emerald-700 dark:text-emerald-400 block mt-1">
             ₱{totalCollected.toLocaleString()}
           </span>
-          <span className="text-[11px] font-bold text-emerald-700">Verified transactions</span>
+          <span className={`text-[11px] font-bold ${
+            highContrastMode ? 'text-emerald-300' : 'text-emerald-700'
+          }`}>
+            Verified transactions
+          </span>
         </div>
 
         <div
           className={`p-3.5 rounded-xl border border-t-4 border-t-red-600 shadow-xs ${
-            highContrastMode ? 'bg-zinc-900 border-zinc-700 text-white' : 'bg-white border-zinc-300 text-zinc-950'
+            highContrastMode
+              ? 'bg-zinc-900 border-zinc-700 text-white'
+              : 'bg-white border-zinc-300 text-zinc-950'
           }`}
         >
           <span className="text-[10px] sm:text-[11px] font-extrabold uppercase text-red-600 block">
             OUTSTANDING BALANCE
           </span>
-          <span className="font-mono font-black text-xl sm:text-2xl text-red-600 block mt-1">
+          <span className={`font-mono font-black text-xl sm:text-2xl block mt-1 ${
+            highContrastMode ? 'text-red-400' : 'text-red-600'
+          }`}>
             ₱{totalOutstanding.toLocaleString()}
           </span>
-          <span className="text-[11px] font-bold text-red-700">Collect before release</span>
+          <span className={`text-[11px] font-bold ${
+            highContrastMode ? 'text-red-300' : 'text-red-700'
+          }`}>
+            Collect before release
+          </span>
         </div>
 
         <div
           className={`p-3.5 rounded-xl border border-t-4 border-t-[#D4A017] shadow-xs ${
-            highContrastMode ? 'bg-zinc-900 border-zinc-700 text-white' : 'bg-white border-zinc-300 text-zinc-950'
+            highContrastMode
+              ? 'bg-zinc-900 border-zinc-700 text-white'
+              : 'bg-white border-zinc-300 text-zinc-950'
           }`}
         >
-          <span className="text-[10px] sm:text-[11px] font-extrabold uppercase text-zinc-500 block">
+          <span className={`text-[10px] sm:text-[11px] font-extrabold uppercase block ${
+            highContrastMode ? 'text-zinc-300' : 'text-zinc-600'
+          }`}>
             PAYMENT TXNS
           </span>
           <span className="font-mono font-black text-xl sm:text-2xl block mt-1">
             {payments.length}
           </span>
-          <span className="text-[11px] font-semibold text-zinc-500">All recorded transactions</span>
+          <span className={`text-[11px] font-semibold ${
+            highContrastMode ? 'text-zinc-300' : 'text-zinc-600'
+          }`}>
+            All recorded transactions
+          </span>
         </div>
 
         <div
           className={`p-3.5 rounded-xl border border-t-4 border-t-amber-500 shadow-xs ${
-            highContrastMode ? 'bg-zinc-900 border-zinc-700 text-white' : 'bg-white border-zinc-300 text-zinc-950'
+            highContrastMode
+              ? 'bg-zinc-900 border-zinc-700 text-white'
+              : 'bg-white border-zinc-300 text-zinc-950'
           }`}
         >
           <span className="text-[10px] sm:text-[11px] font-extrabold uppercase text-amber-700 block">
@@ -165,11 +202,14 @@ export function AdminPaymentsTab({
           <span className="font-mono font-black text-xl sm:text-2xl text-[#B8860B] block mt-1">
             {flaggedCount}
           </span>
-          <span className="text-[11px] font-semibold text-zinc-500">Requires follow-up</span>
+          <span className={`text-[11px] font-semibold ${
+            highContrastMode ? 'text-zinc-300' : 'text-zinc-600'
+          }`}>
+            Requires follow-up
+          </span>
         </div>
       </div>
 
-      {/* Payment First Policy Callout */}
       <div className="p-3.5 rounded-xl border-l-4 border-l-[#D4A017] border border-amber-300 bg-amber-50/90 text-zinc-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
         <div className="text-xs">
           <strong className="font-extrabold uppercase tracking-wide text-[#B8860B] block">
@@ -179,6 +219,7 @@ export function AdminPaymentsTab({
             Only verified transactions count toward the paid total. PayMongo confirms automatically; staff review each manually recorded payment below. Full payment is required before order confirmation.
           </span>
         </div>
+
         <div className="flex items-center gap-1.5 shrink-0">
           {(['all', 'partial', 'unpaid', 'paid'] as const).map((m) => (
             <button
@@ -188,7 +229,7 @@ export function AdminPaymentsTab({
               className={`px-2.5 py-1 rounded-lg text-xs font-extrabold uppercase cursor-pointer ${
                 filterMode === m
                   ? 'bg-[#121214] text-[#D4A017] border border-black'
-                  : 'bg-white text-zinc-700 border border-zinc-300'
+                  : 'bg-white text-zinc-900 border border-zinc-300'
               }`}
             >
               {m}
@@ -197,86 +238,128 @@ export function AdminPaymentsTab({
         </div>
       </div>
 
-      {/* Balance per Customer Request Table */}
       <div className="space-y-2">
-        <h2 className="text-xs sm:text-sm font-extrabold uppercase tracking-wider">
+        <h2 className={`text-xs sm:text-sm font-extrabold uppercase tracking-wider ${
+          highContrastMode ? 'text-white' : 'text-zinc-950'
+        }`}>
           Balance per Customer Request (tbl_payment_intents / tbl_payments)
         </h2>
 
         <div
-          className={`hidden md:block rounded-2xl border overflow-hidden shadow-xs ${
-            highContrastMode ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-zinc-300'
+          className={`hidden md:block rounded-2xl overflow-hidden shadow-xs ${
+            highContrastMode ? 'bg-zinc-900' : 'bg-white'
           }`}
         >
-          <table className="w-full text-left border-collapse text-xs">
+          <table className="w-full text-left border-collapse text-[11px] sm:text-xs">
             <thead>
-              <tr className="bg-[#121214] text-[#E6B222] uppercase tracking-wider font-extrabold">
-                <th className="py-3 px-3.5">Request</th>
-                <th className="py-3 px-3.5">Customer</th>
-                <th className="py-3 px-3.5">Service</th>
-                <th className="py-3 px-3.5">Total Amount</th>
-                <th className="py-3 px-3.5">Amount Paid</th>
-                <th className="py-3 px-3.5">Pending</th>
-                <th className="py-3 px-3.5">Balance Due</th>
-                <th className="py-3 px-3.5">Status</th>
+              <tr className="bg-[#121214] text-[#E6B222] uppercase tracking-wider font-extrabold border-b border-zinc-700">
+                <th className="py-3 px-3.5 text-left">Request</th>
+                <th className="py-3 px-3.5 text-left">Customer</th>
+                <th className="py-3 px-3.5 text-left">Service</th>
+                <th className="py-3 px-3.5 text-left">Total Amount</th>
+                <th className="py-3 px-3.5 text-left">Amount Paid</th>
+                <th className="py-3 px-3.5 text-left">Pending</th>
+                <th className="py-3 px-3.5 text-left">Balance Due</th>
+                <th className="py-3 px-3.5 text-left">Status</th>
                 <th className="py-3 px-3.5 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+
+            <tbody
+              className={
+                highContrastMode
+                  ? 'divide-y divide-zinc-700'
+                  : 'divide-y divide-zinc-200'
+              }
+            >
               {filteredRequests.map((req) => (
                 <tr
                   key={req.id}
-                  className={highContrastMode ? 'hover:bg-zinc-800 text-white' : 'hover:bg-amber-50/40 text-zinc-900'}
+                  className={
+                    highContrastMode
+                      ? 'bg-zinc-900 text-white hover:bg-zinc-800'
+                      : 'bg-white text-zinc-950 hover:bg-amber-50'
+                  }
                 >
-                  <td className="py-3 px-3.5 font-mono font-black text-[#B8860B]">{req.id}</td>
-                  <td className="py-3 px-3.5 font-bold">{req.customerName}</td>
-                  <td className="py-3 px-3.5 font-medium">{req.service}</td>
-                  <td className="py-3 px-3.5 font-mono font-bold">₱{req.amount}</td>
-                  <td className="py-3 px-3.5 font-mono font-bold text-emerald-700">
-                    ₱{req.paidAmount} {req.paidAmount > 0 && req.unpaidAmount > 0 ? '(partial)' : ''}
+                  <td className="py-3 px-3.5 font-mono font-black text-amber-800">
+                    {req.id}
                   </td>
-                  <td className="py-3 px-3.5 font-mono font-bold text-amber-700">
+
+                  <td className="py-3 px-3.5 font-bold text-sm">
+                    {req.customerName}
+                  </td>
+
+                  <td className="py-3 px-3.5 font-medium">
+                    {req.service}
+                  </td>
+
+                  <td className="py-3 px-3.5 font-mono font-bold">
+                    ₱{req.amount}
+                  </td>
+
+                  <td className={`py-3 px-3.5 font-mono font-bold ${
+                    highContrastMode ? 'text-emerald-300' : 'text-emerald-700'
+                  }`}>
+                    ₱{req.paidAmount}{' '}
+                    {req.paidAmount > 0 && req.unpaidAmount > 0 ? '(partial)' : ''}
+                  </td>
+
+                  <td className={`py-3 px-3.5 font-mono font-bold ${
+                    highContrastMode ? 'text-amber-300' : 'text-amber-800'
+                  }`}>
                     ₱{pendingAmountsByOrder.get(req.id) ?? 0}
                   </td>
+
                   <td
                     className={`py-3 px-3.5 font-mono font-black ${
-                      req.unpaidAmount > 0 ? 'text-red-600' : 'text-zinc-500'
+                      req.unpaidAmount > 0
+                        ? highContrastMode
+                          ? 'text-red-400'
+                          : 'text-red-600'
+                        : highContrastMode
+                          ? 'text-white'
+                          : 'text-zinc-950'
                     }`}
                   >
                     ₱{req.unpaidAmount}
                   </td>
+
                   <td className="py-3 px-3.5">
                     {req.unpaidAmount === 0 ? (
-                      <span className="px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">
                         ✓ Fully Paid
                       </span>
                     ) : req.paidAmount > 0 ? (
-                      <span className="px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300">
+                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300">
                         ◐ Partial — Balance Due
                       </span>
                     ) : (
-                      <span className="px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-red-100 text-red-800 border border-red-300">
+                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-extrabold bg-red-100 text-red-800 border border-red-300">
                         ! Unpaid
                       </span>
                     )}
                   </td>
-                  <td className="py-3 px-3.5 text-right space-x-1.5 whitespace-nowrap">
-                    {availableToRecord(req) > 0 && (
+
+                  <td className="py-3 px-3.5 text-right whitespace-nowrap">
+                    <div className="inline-flex items-center justify-end gap-1.5">
+                      {availableToRecord(req) > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => onRecordPayment(req.id, availableToRecord(req))}
+                          className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[11px] rounded-lg cursor-pointer transition-colors"
+                        >
+                          Submit ₱{availableToRecord(req)}
+                        </button>
+                      )}
+
                       <button
                         type="button"
-                        onClick={() => onRecordPayment(req.id, availableToRecord(req))}
-                        className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[11px] rounded-lg cursor-pointer"
+                        onClick={() => onSelectOrder(req)}
+                        className="px-2.5 py-1 bg-amber-100 hover:bg-[#D4A017] text-black font-extrabold text-[11px] rounded-lg border border-black cursor-pointer transition-colors"
                       >
-                        Submit ₱{availableToRecord(req)}
+                        Details
                       </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => onSelectOrder(req)}
-                      className="px-2.5 py-1 bg-amber-100 hover:bg-[#D4A017] text-black font-extrabold text-[11px] rounded-lg border border-black cursor-pointer"
-                    >
-                      Details
-                    </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -284,32 +367,57 @@ export function AdminPaymentsTab({
           </table>
         </div>
 
-        {/* Mobile Cards */}
         <div className="md:hidden space-y-2.5">
           {filteredRequests.map((req) => (
             <div
               key={req.id}
               className={`p-3.5 rounded-xl border space-y-2 ${
-                highContrastMode ? 'bg-zinc-900 border-zinc-700 text-white' : 'bg-white border-zinc-300 text-zinc-950'
+                highContrastMode
+                  ? 'bg-zinc-900 border-zinc-700 text-white'
+                  : 'bg-white border-zinc-300 text-zinc-950'
               }`}
             >
               <div className="flex justify-between items-center">
-                <span className="font-mono font-black text-xs text-[#B8860B]">{req.id}</span>
-                <span className={`font-mono font-black text-xs ${req.unpaidAmount > 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+                <span className="font-mono font-black text-xs text-amber-800">
+                  {req.id}
+                </span>
+
+                <span
+                  className={`font-mono font-black text-xs ${
+                    req.unpaidAmount > 0
+                      ? highContrastMode
+                        ? 'text-red-400'
+                        : 'text-red-600'
+                      : highContrastMode
+                        ? 'text-emerald-300'
+                        : 'text-emerald-700'
+                  }`}
+                >
                   Balance: ₱{req.unpaidAmount}
                 </span>
               </div>
+
               <div className="flex justify-between text-xs font-bold">
                 <span>{req.customerName}</span>
                 <span>
                   Paid ₱{req.paidAmount} / ₱{req.amount}
                 </span>
               </div>
+
+              <div className={`text-xs font-medium ${
+                highContrastMode ? 'text-zinc-300' : 'text-zinc-700'
+              }`}>
+                {req.service}
+              </div>
+
               {(pendingAmountsByOrder.get(req.id) ?? 0) > 0 && (
-                <div className="text-xs font-bold text-amber-700">
+                <div className={`text-xs font-bold ${
+                  highContrastMode ? 'text-amber-300' : 'text-amber-800'
+                }`}>
                   Pending review: ₱{pendingAmountsByOrder.get(req.id)}
                 </div>
               )}
+
               <div className="flex gap-2 pt-1">
                 {availableToRecord(req) > 0 && (
                   <button
@@ -320,6 +428,7 @@ export function AdminPaymentsTab({
                     Submit ₱{availableToRecord(req)}
                   </button>
                 )}
+
                 <button
                   type="button"
                   onClick={() => onSelectOrder(req)}
@@ -333,32 +442,52 @@ export function AdminPaymentsTab({
         </div>
       </div>
 
-      {/* Transaction Log */}
       <div className="space-y-2 pt-2">
-        <h2 className="text-xs sm:text-sm font-extrabold uppercase tracking-wider">
+        <h2 className={`text-xs sm:text-sm font-extrabold uppercase tracking-wider ${
+          highContrastMode ? 'text-white' : 'text-zinc-950'
+        }`}>
           Payment Transaction Log (tbl_payments)
         </h2>
+
         <div className="md:hidden space-y-2">
           {payments.map((txn) => (
             <div
               key={txn.id}
               className={`rounded-xl border p-3 space-y-2 ${
-                highContrastMode ? 'bg-zinc-900 border-zinc-700 text-white' : 'bg-white border-zinc-300 text-zinc-900'
+                highContrastMode
+                  ? 'bg-zinc-900 border-zinc-700 text-white'
+                  : 'bg-white border-zinc-300 text-zinc-950'
               }`}
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <span className="block font-mono font-black text-[#B8860B]">{txn.requestId}</span>
-                  <span className="block text-xs font-bold truncate">{txn.customerName}</span>
+                  <span className="block font-mono font-black text-amber-800">
+                    {txn.requestId}
+                  </span>
+                  <span className="block text-xs font-bold truncate">
+                    {txn.customerName}
+                  </span>
                 </div>
-                <span className="shrink-0 font-mono font-black text-emerald-700">₱{txn.amount}</span>
+
+                <span className={`shrink-0 font-mono font-black ${
+                  highContrastMode ? 'text-emerald-300' : 'text-emerald-700'
+                }`}>
+                  ₱{txn.amount}
+                </span>
               </div>
-              <div className="text-xs text-zinc-500">
+
+              <div className={`text-xs ${
+                highContrastMode ? 'text-zinc-300' : 'text-zinc-700'
+              }`}>
                 {txn.date} · {txn.time} · {txn.method}
               </div>
-              <div className="text-xs break-all">
+
+              <div className={`text-xs break-all ${
+                highContrastMode ? 'text-zinc-300' : 'text-zinc-700'
+              }`}>
                 Reference: {txn.paymongoId || txn.gcashRefNo || txn.id}
               </div>
+
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs font-extrabold">
                   {txn.status === 'Pending'
@@ -367,6 +496,7 @@ export function AdminPaymentsTab({
                       ? 'Pending Review'
                       : txn.status}
                 </span>
+
                 {txn.status === 'Pending Review' ? (
                   <div className="flex gap-1.5">
                     <button
@@ -376,6 +506,7 @@ export function AdminPaymentsTab({
                     >
                       Verify
                     </button>
+
                     <button
                       type="button"
                       onClick={() => onReviewPayment(txn.paymentId, 'flagged')}
@@ -385,20 +516,28 @@ export function AdminPaymentsTab({
                     </button>
                   </div>
                 ) : txn.status === 'Pending' ? (
-                  <span className="text-xs text-zinc-500">Automatic</span>
+                  <span className={`text-xs ${
+                    highContrastMode ? 'text-zinc-300' : 'text-zinc-600'
+                  }`}>
+                    Automatic
+                  </span>
                 ) : null}
               </div>
             </div>
           ))}
+
           {payments.length === 0 && (
-            <div className="rounded-xl border border-zinc-300 bg-white px-3.5 py-6 text-center text-sm text-zinc-500">
+            <div className="rounded-xl border border-zinc-300 bg-white px-3.5 py-6 text-center text-sm text-zinc-600">
               No payment transactions have been recorded yet.
             </div>
           )}
         </div>
+
         <div
           className={`hidden md:block rounded-2xl border overflow-x-auto shadow-xs ${
-            highContrastMode ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-zinc-300'
+            highContrastMode
+              ? 'bg-zinc-900 border-zinc-700'
+              : 'bg-white border-zinc-300'
           }`}
         >
           <table className="w-full text-left border-collapse text-xs">
@@ -413,24 +552,48 @@ export function AdminPaymentsTab({
                 <th className="py-2.5 px-3.5 text-right">Review</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+
+            <tbody
+              className={
+                highContrastMode
+                  ? 'divide-y divide-zinc-700'
+                  : 'divide-y divide-zinc-200'
+              }
+            >
               {payments.map((txn) => (
                 <tr
                   key={txn.id}
-                  className={highContrastMode ? 'text-white' : 'text-zinc-900'}
+                  className={
+                    highContrastMode
+                      ? 'bg-zinc-900 text-white hover:bg-zinc-800'
+                      : 'bg-white text-zinc-950 hover:bg-amber-50'
+                  }
                 >
                   <td className="py-2.5 px-3.5 whitespace-nowrap font-semibold">
                     {txn.date} · {txn.time}
                   </td>
-                  <td className="py-2.5 px-3.5 font-mono font-black text-[#B8860B]">{txn.requestId}</td>
-                  <td className="py-2.5 px-3.5 font-bold">{txn.customerName}</td>
-                  <td className="py-2.5 px-3.5 font-mono font-black text-emerald-700">₱{txn.amount}</td>
+
+                  <td className="py-2.5 px-3.5 font-mono font-black text-amber-800">
+                    {txn.requestId}
+                  </td>
+
+                  <td className="py-2.5 px-3.5 font-bold">
+                    {txn.customerName}
+                  </td>
+
+                  <td className={`py-2.5 px-3.5 font-mono font-black ${
+                    highContrastMode ? 'text-emerald-300' : 'text-emerald-700'
+                  }`}>
+                    ₱{txn.amount}
+                  </td>
+
                   <td className="py-2.5 px-3.5 text-[11px]">
                     <span className="font-bold block">{txn.method}</span>
-                    <span className="text-zinc-500">
+                    <span className={highContrastMode ? 'text-zinc-300' : 'text-zinc-600'}>
                       {txn.paymongoId || txn.gcashRefNo || txn.id}
                     </span>
                   </td>
+
                   <td className="py-2.5 px-3.5 text-right whitespace-nowrap">
                     <span
                       className={`px-2 py-0.5 rounded-full text-[11px] font-extrabold border ${
@@ -447,11 +610,12 @@ export function AdminPaymentsTab({
                         ? '✓ Paid & Verified'
                         : txn.status === 'Pending'
                           ? 'Waiting for PayMongo'
-                        : txn.status === 'Pending Review'
-                          ? '⏳ Pending Review'
-                          : txn.status}
+                          : txn.status === 'Pending Review'
+                            ? '⏳ Pending Review'
+                            : txn.status}
                     </span>
                   </td>
+
                   <td className="py-2.5 px-3.5 text-right whitespace-nowrap">
                     {txn.status === 'Pending Review' && (
                       <div className="flex justify-end gap-1.5">
@@ -462,6 +626,7 @@ export function AdminPaymentsTab({
                         >
                           Verify
                         </button>
+
                         <button
                           type="button"
                           onClick={() => onReviewPayment(txn.paymentId, 'flagged')}
@@ -471,15 +636,24 @@ export function AdminPaymentsTab({
                         </button>
                       </div>
                     )}
+
                     {txn.status === 'Pending' && (
-                      <span className="text-zinc-500">Automatic</span>
+                      <span className={highContrastMode ? 'text-zinc-300' : 'text-zinc-600'}>
+                        Automatic
+                      </span>
                     )}
                   </td>
                 </tr>
               ))}
+
               {payments.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-3.5 py-6 text-center text-zinc-500">
+                  <td
+                    colSpan={7}
+                    className={`px-3.5 py-6 text-center ${
+                      highContrastMode ? 'text-zinc-300' : 'text-zinc-600'
+                    }`}
+                  >
                     No payment transactions have been recorded yet.
                   </td>
                 </tr>
@@ -522,19 +696,20 @@ export function AdminCustomersAndMessages({
 
   const filteredCustomers = useMemo(() => {
     const q = custSearch.toLowerCase();
+
     return customers.filter(
       (c) =>
         !q ||
         `${c.firstName} ${c.lastName}`.toLowerCase().includes(q) ||
         c.username.toLowerCase().includes(q) ||
         c.mobileNumber.includes(q) ||
-        c.email.toLowerCase().includes(q)
+        c.email.toLowerCase().includes(q),
     );
   }, [customers, custSearch]);
 
   const activeThread = useMemo(
     () => threads.find((t) => t.id === selectedThreadId) || threads[0],
-    [threads, selectedThreadId]
+    [threads, selectedThreadId],
   );
 
   if (mode === 'customers') {
@@ -549,12 +724,13 @@ export function AdminCustomersAndMessages({
                 fontSizeLevel === 'xlarge'
                   ? 'text-2xl sm:text-3xl'
                   : fontSizeLevel === 'reduced'
-                  ? 'text-lg sm:text-xl'
-                  : 'text-xl sm:text-2xl'
+                    ? 'text-lg sm:text-xl'
+                    : 'text-xl sm:text-2xl'
               }`}
             >
               Customer Directory (tbl_user)
             </h1>
+
             <p
               className={`font-medium mt-0.5 ${
                 highContrastMode ? 'text-zinc-300' : 'text-zinc-600'
@@ -567,6 +743,7 @@ export function AdminCustomersAndMessages({
 
         <div className="relative max-w-md">
           <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3" />
+
           <input
             type="text"
             placeholder="Search customer by name, @username, mobile, or email..."
@@ -582,7 +759,9 @@ export function AdminCustomersAndMessages({
 
         <div
           className={`hidden md:block rounded-2xl border overflow-hidden shadow-xs ${
-            highContrastMode ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-zinc-300'
+            highContrastMode
+              ? 'bg-zinc-900 border-zinc-700'
+              : 'bg-white border-zinc-300'
           }`}
         >
           <table className="w-full text-left border-collapse text-xs">
@@ -598,43 +777,81 @@ export function AdminCustomersAndMessages({
                 <th className="py-3 px-3.5 text-right">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+
+            <tbody
+              className={
+                highContrastMode
+                  ? 'divide-y divide-zinc-700'
+                  : 'divide-y divide-zinc-200'
+              }
+            >
               {filteredCustomers.map((c) => (
                 <tr
                   key={c.id}
-                  className={highContrastMode ? 'hover:bg-zinc-800 text-white' : 'hover:bg-amber-50/40 text-zinc-900'}
+                  className={
+                    highContrastMode
+                      ? 'bg-zinc-900 text-white hover:bg-zinc-800'
+                      : 'bg-white text-zinc-950 hover:bg-amber-50'
+                  }
                 >
                   <td className="py-3 px-3.5">
                     <div className="font-extrabold text-xs sm:text-sm">
                       {c.firstName} {c.lastName}
                     </div>
-                    <span className="font-mono text-[11px] text-zinc-500">
+
+                    <span className={`font-mono text-[11px] ${
+                      highContrastMode ? 'text-zinc-300' : 'text-zinc-600'
+                    }`}>
                       @{c.username} · #{c.id}
                     </span>
                   </td>
+
                   <td className="py-3 px-3.5">
-                    <span className="font-mono font-bold block">{c.mobileNumber}</span>
-                    <span className="text-zinc-500 text-[11px]">{c.email}</span>
+                    <span className="font-mono font-bold block">
+                      {c.mobileNumber}
+                    </span>
+
+                    <span className={`text-[11px] ${
+                      highContrastMode ? 'text-zinc-300' : 'text-zinc-600'
+                    }`}>
+                      {c.email}
+                    </span>
                   </td>
+
                   <td className="py-3 px-3.5 font-medium">
                     Brgy. {c.barangay}, {c.municipality}
                   </td>
-                  <td className="py-3 px-3.5 font-mono font-bold">{c.totalRequests}</td>
-                  <td className="py-3 px-3.5 font-mono font-bold text-emerald-700">
+
+                  <td className="py-3 px-3.5 font-mono font-bold">
+                    {c.totalRequests}
+                  </td>
+
+                  <td className={`py-3 px-3.5 font-mono font-bold ${
+                    highContrastMode ? 'text-emerald-300' : 'text-emerald-700'
+                  }`}>
                     ₱{c.totalSpent.toLocaleString()}
                   </td>
+
                   <td
                     className={`py-3 px-3.5 font-mono font-black ${
-                      c.outstandingBalance > 0 ? 'text-red-600' : 'text-zinc-500'
+                      c.outstandingBalance > 0
+                        ? highContrastMode
+                          ? 'text-red-400'
+                          : 'text-red-600'
+                        : highContrastMode
+                          ? 'text-zinc-300'
+                          : 'text-zinc-600'
                     }`}
                   >
                     ₱{c.outstandingBalance.toLocaleString()}
                   </td>
+
                   <td className="py-3 px-3.5">
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-100 text-emerald-800 border border-emerald-300">
                       {c.status}
                     </span>
                   </td>
+
                   <td className="py-3 px-3.5 text-right">
                     <button
                       type="button"
@@ -650,30 +867,39 @@ export function AdminCustomersAndMessages({
           </table>
         </div>
 
-        {/* Mobile Customer Cards */}
         <div className="md:hidden space-y-2.5">
           {filteredCustomers.map((c) => (
             <div
               key={c.id}
               className={`p-3.5 rounded-xl border space-y-2 ${
-                highContrastMode ? 'bg-zinc-900 border-zinc-700 text-white' : 'bg-white border-zinc-300 text-zinc-950'
+                highContrastMode
+                  ? 'bg-zinc-900 border-zinc-700 text-white'
+                  : 'bg-white border-zinc-300 text-zinc-950'
               }`}
             >
               <div className="flex justify-between items-center">
                 <strong className="font-extrabold text-sm">
                   {c.firstName} {c.lastName}
                 </strong>
+
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
                   {c.status}
                 </span>
               </div>
-              <div className="text-xs text-zinc-500 font-mono">
+
+              <div className={`text-xs font-mono ${
+                highContrastMode ? 'text-zinc-300' : 'text-zinc-600'
+              }`}>
                 {c.mobileNumber} · {c.totalRequests} requests · Spent ₱{c.totalSpent.toLocaleString()}
               </div>
+
               <div className="flex justify-between items-center pt-1">
-                <span className="text-xs font-bold text-red-600">
+                <span className={`text-xs font-bold ${
+                  highContrastMode ? 'text-red-400' : 'text-red-600'
+                }`}>
                   Balance Due: ₱{c.outstandingBalance}
                 </span>
+
                 <button
                   type="button"
                   onClick={() => onSelectCustomer(c)}
@@ -692,6 +918,7 @@ export function AdminCustomersAndMessages({
   if (mode === 'messages') {
     const handleSend = () => {
       if (!replyInput.trim() || !activeThread) return;
+
       onSendAdminReply(activeThread.id, replyInput.trim());
       setReplyInput('');
     };
@@ -706,12 +933,13 @@ export function AdminCustomersAndMessages({
               fontSizeLevel === 'xlarge'
                 ? 'text-2xl sm:text-3xl'
                 : fontSizeLevel === 'reduced'
-                ? 'text-lg sm:text-xl'
-                : 'text-xl sm:text-2xl'
+                  ? 'text-lg sm:text-xl'
+                  : 'text-xl sm:text-2xl'
             }`}
           >
             Admin Messages Inbox
           </h1>
+
           <p
             className={`font-medium mt-0.5 ${
               highContrastMode ? 'text-zinc-300' : 'text-zinc-600'
@@ -722,11 +950,11 @@ export function AdminCustomersAndMessages({
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5">
-          {/* Inbox Thread List */}
           <div className="lg:col-span-5 space-y-2">
             {threads.map((thr) => {
               const isSelected = activeThread?.id === thr.id;
               const lastMsg = thr.messages[thr.messages.length - 1];
+
               return (
                 <div
                   key={thr.id}
@@ -735,14 +963,15 @@ export function AdminCustomersAndMessages({
                     isSelected
                       ? 'border-l-[#D4A017] border-[#D4A017] bg-amber-50/90 text-zinc-950 shadow-sm'
                       : highContrastMode
-                      ? 'border-l-zinc-600 border-zinc-700 bg-zinc-900 text-white hover:border-amber-400'
-                      : 'border-l-zinc-400 border-zinc-300 bg-white text-zinc-950 hover:border-[#D4A017]'
+                        ? 'border-l-zinc-600 border-zinc-700 bg-zinc-900 text-white hover:border-amber-400'
+                        : 'border-l-zinc-400 border-zinc-300 bg-white text-zinc-950 hover:border-[#D4A017]'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono font-black text-xs text-[#B8860B]">
+                    <span className="font-mono font-black text-xs text-amber-800">
                       {thr.requestId} · {thr.customerName}
                     </span>
+
                     <span
                       className={`px-2 py-0.5 rounded text-[10px] font-black uppercase border ${
                         thr.status === 'UNREAD'
@@ -753,8 +982,14 @@ export function AdminCustomersAndMessages({
                       {thr.status}
                     </span>
                   </div>
-                  <p className="text-xs font-bold mt-1 truncate">"{lastMsg?.text}"</p>
-                  <span className="text-[10px] text-zinc-500 font-semibold block mt-1">
+
+                  <p className="text-xs font-bold mt-1 truncate">
+                    "{lastMsg?.text}"
+                  </p>
+
+                  <span className={`text-[10px] font-semibold block mt-1 ${
+                    highContrastMode && !isSelected ? 'text-zinc-300' : 'text-zinc-600'
+                  }`}>
                     {thr.serviceName} · Updated {thr.lastUpdated}
                   </span>
                 </div>
@@ -762,11 +997,12 @@ export function AdminCustomersAndMessages({
             })}
           </div>
 
-          {/* Active Conversation Window */}
           {activeThread && (
             <div
               className={`lg:col-span-7 border rounded-2xl p-4 flex flex-col justify-between h-[460px] shadow-xs ${
-                highContrastMode ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-zinc-300'
+                highContrastMode
+                  ? 'bg-zinc-900 border-zinc-700 text-white'
+                  : 'bg-white border-zinc-300 text-zinc-950'
               }`}
             >
               <div className="border-b border-zinc-200 pb-2.5 flex items-center justify-between">
@@ -774,11 +1010,17 @@ export function AdminCustomersAndMessages({
                   <span className="font-mono font-black text-xs bg-amber-100 text-black px-2 py-0.5 rounded border border-[#D4A017]">
                     {activeThread.requestId}
                   </span>
+
                   <h3 className="font-extrabold text-sm mt-1">
                     {activeThread.customerName} — {activeThread.serviceName}
                   </h3>
                 </div>
-                <span className="text-xs font-bold text-emerald-700">● Direct Thread</span>
+
+                <span className={`text-xs font-bold ${
+                  highContrastMode ? 'text-emerald-300' : 'text-emerald-700'
+                }`}>
+                  ● Direct Thread
+                </span>
               </div>
 
               <div className="space-y-2.5 overflow-y-auto py-3 pr-1 flex-1">
@@ -789,14 +1031,17 @@ export function AdminCustomersAndMessages({
                       m.isStaff ? 'ml-auto items-end' : 'mr-auto items-start'
                     }`}
                   >
-                    <span className="text-[10px] text-zinc-500 font-semibold mb-0.5">
+                    <span className={`text-[10px] font-semibold mb-0.5 ${
+                      highContrastMode ? 'text-zinc-300' : 'text-zinc-600'
+                    }`}>
                       {m.sender} · {m.time}
                     </span>
+
                     <div
                       className={`p-2.5 rounded-xl text-xs sm:text-sm leading-relaxed ${
                         m.isStaff
                           ? 'bg-[#D4A017] text-black font-bold border border-[#B8860B]'
-                          : 'bg-zinc-900 text-white border border-zinc-700'
+                          : 'bg-zinc-800 text-white border border-zinc-600'
                       }`}
                     >
                       {m.text}
@@ -805,7 +1050,6 @@ export function AdminCustomersAndMessages({
                 ))}
               </div>
 
-              {/* Quick Canned Replies */}
               <div className="space-y-2 pt-2 border-t border-zinc-200">
                 <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
                   {[
@@ -833,10 +1077,11 @@ export function AdminCustomersAndMessages({
                     onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                     className={`flex-1 border rounded-xl px-3.5 py-2 font-semibold text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#D4A017] ${
                       highContrastMode
-                        ? 'bg-black border-zinc-700 text-white'
-                        : 'bg-zinc-100 border-zinc-300 text-zinc-950'
+                        ? 'bg-black border-zinc-700 text-white placeholder-zinc-400'
+                        : 'bg-zinc-100 border-zinc-300 text-zinc-950 placeholder-zinc-500'
                     }`}
                   />
+
                   <button
                     type="button"
                     onClick={handleSend}
@@ -854,7 +1099,6 @@ export function AdminCustomersAndMessages({
     );
   }
 
-  // mode === 'profile' (Admin Profile & Store Info matching screen-contact & customer profile)
   return (
     <div className="space-y-4 sm:space-y-5">
       <div className="border-b border-[#D4A017] pb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -866,12 +1110,13 @@ export function AdminCustomersAndMessages({
               fontSizeLevel === 'xlarge'
                 ? 'text-2xl sm:text-3xl'
                 : fontSizeLevel === 'reduced'
-                ? 'text-lg sm:text-xl'
-                : 'text-xl sm:text-2xl'
+                  ? 'text-lg sm:text-xl'
+                  : 'text-xl sm:text-2xl'
             }`}
           >
             Admin Operator Profile & Store Info
           </h1>
+
           <p
             className={`font-medium mt-0.5 ${
               highContrastMode ? 'text-zinc-300' : 'text-zinc-600'
@@ -893,7 +1138,9 @@ export function AdminCustomersAndMessages({
 
       <div
         className={`p-4 sm:p-5 rounded-2xl border space-y-4 shadow-xs ${
-          highContrastMode ? 'bg-zinc-900 border-zinc-700 text-white' : 'bg-white border-zinc-300 text-zinc-950'
+          highContrastMode
+            ? 'bg-zinc-900 border-zinc-700 text-white'
+            : 'bg-white border-zinc-300 text-zinc-950'
         }`}
       >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 border-b border-zinc-200 pb-3.5">
@@ -901,14 +1148,21 @@ export function AdminCustomersAndMessages({
             <div className="w-12 h-12 bg-gradient-to-tr from-[#D4A017] to-amber-200 text-black rounded-xl font-black text-lg flex items-center justify-center border border-black shrink-0">
               RC
             </div>
+
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="font-extrabold text-base sm:text-lg">Ron Castillo (Lead Admin)</h2>
+                <h2 className="font-extrabold text-base sm:text-lg">
+                  Ron Castillo (Lead Admin)
+                </h2>
+
                 <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-full">
                   ● Super Admin Session
                 </span>
               </div>
-              <span className="text-xs text-zinc-500 font-semibold">
+
+              <span className={`text-xs font-semibold ${
+                highContrastMode ? 'text-zinc-300' : 'text-zinc-600'
+              }`}>
                 NETSO Prints & Ads Operations · Workstation #1
               </span>
             </div>
@@ -917,23 +1171,29 @@ export function AdminCustomersAndMessages({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs">
           <div className="p-3.5 rounded-xl border-l-4 border-l-[#D4A017] border border-zinc-200 bg-zinc-50 text-zinc-900 space-y-1">
-            <span className="text-[10px] font-extrabold uppercase text-[#B8860B] block">
+            <span className="text-[10px] font-extrabold uppercase text-amber-800 block">
               📍 Store Location (screen-contact)
             </span>
-            <p className="font-extrabold text-sm">Malvar St., Victory Norte, Santiago City</p>
-            <p className="text-zinc-600 font-medium">
+
+            <p className="font-extrabold text-sm">
+              Malvar St., Victory Norte, Santiago City
+            </p>
+
+            <p className="text-zinc-700 font-medium">
               Back of JIMCO Bldg. & New Dunkin' Donuts, near Puregold Hwy, beside James Pandesal
             </p>
           </div>
 
           <div className="p-3.5 rounded-xl border-l-4 border-l-[#D4A017] border border-zinc-200 bg-zinc-50 text-zinc-900 space-y-1">
-            <span className="text-[10px] font-extrabold uppercase text-[#B8860B] block">
+            <span className="text-[10px] font-extrabold uppercase text-amber-800 block">
               💳 Official GCash Merchant Account
             </span>
+
             <p className="font-mono font-black text-sm text-blue-900">
               0961-775-1907 (Smart) · 0935-596-4485 (TM)
             </p>
-            <p className="text-zinc-600 font-semibold">
+
+            <p className="text-zinc-700 font-semibold">
               Account Name: R*****o Jr. C. · facebook.com/netsoprints
             </p>
           </div>
