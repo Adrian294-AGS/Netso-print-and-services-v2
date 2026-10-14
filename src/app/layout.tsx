@@ -2,7 +2,7 @@ import React from 'react';
 import './globals.css';
 
 export const metadata = {
-  title: 'NETSO Prints & Ads — Admin & Customer Portal',
+  title: 'NETSO Prints & Ads ',
   description:
     'Unified Admin and Customer Portal for NETSO Prints & Ads featuring print order management, GCash payment tracking, customer directory, real-time request messaging, and user activity logs.',
   openGraph: {

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   LayoutGrid,
   FileText,
@@ -124,6 +124,10 @@ export function AdminPortal({
   const [activeTab, setActiveTab] = useState<AdminTabId>(() =>
     canAccessTab(initialTab) ? initialTab : 'dashboard'
   );
+  const [gcashEnabled, setGCashEnabled] = useState(false);
+  const [gcashSettingsLoaded, setGCashSettingsLoaded] = useState(false);
+  const [gcashSettingsSaving, setGCashSettingsSaving] = useState(false);
+  const [gcashSettingsError, setGCashSettingsError] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState<string>('All');
   const [activeOperator] = useState<StaffMember>(() => {
     const roleLabels: Record<string, StaffMember['role']> = {
@@ -145,6 +149,56 @@ export function AdminPortal({
       completedToday: 0,
     };
   });
+
+  useEffect(() => {
+    let active = true;
+    void fetch('/api/payment-settings')
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok || typeof result.gcashEnabled !== 'boolean') {
+          throw new Error(result.error || 'Unable to load GCash payment settings.');
+        }
+        if (active) setGCashEnabled(result.gcashEnabled);
+      })
+      .catch((error: unknown) => {
+        console.error('Unable to load GCash payment settings:', error);
+        if (active) {
+          setGCashSettingsError(
+            error instanceof Error ? error.message : 'Unable to load GCash payment settings.',
+          );
+        }
+      })
+      .finally(() => {
+        if (active) setGCashSettingsLoaded(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleToggleGCash = async () => {
+    setGCashSettingsSaving(true);
+    setGCashSettingsError('');
+    try {
+      const response = await fetch('/api/payment-settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gcashEnabled: !gcashEnabled }),
+      });
+      const result = await response.json();
+      if (!response.ok || typeof result.gcashEnabled !== 'boolean') {
+        throw new Error(result.error || 'Unable to update GCash payment settings.');
+      }
+      setGCashEnabled(result.gcashEnabled);
+    } catch (error) {
+      console.error('Unable to update GCash payment settings:', error);
+      setGCashSettingsError(
+        error instanceof Error ? error.message : 'Unable to update GCash payment settings.',
+      );
+    } finally {
+      setGCashSettingsSaving(false);
+    }
+  };
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
 
   const [selectedOrderForDetails, setSelectedOrderForDetails] = useState<RequestOrder | null>(null);
@@ -397,6 +451,12 @@ export function AdminPortal({
               onNavigateTab={handleNavigateTab}
               onUpdateOrderStatus={onUpdateOrderStatus}
               onSelectOrder={(ord) => setSelectedOrderForDetails(ord)}
+              isLeadAdmin={isLeadAdmin}
+              gcashEnabled={gcashEnabled}
+              gcashSettingsLoaded={gcashSettingsLoaded}
+              gcashSettingsSaving={gcashSettingsSaving}
+              gcashSettingsError={gcashSettingsError}
+              onToggleGCash={handleToggleGCash}
               highContrastMode={highContrastMode}
               fontSizeLevel={fontSizeLevel}
             />

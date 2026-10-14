@@ -407,6 +407,9 @@ export function CustomerPortal({
   );
   const [requestFiles, setRequestFiles] = useState<UploadedFile[]>([]);
   const [requestNotes, setRequestNotes] = useState<string>('');
+  const [requestPaymentMethod, setRequestPaymentMethod] =
+    useState<'GCash' | 'Cash on Pickup'>('Cash on Pickup');
+  const [gcashEnabled, setGCashEnabled] = useState(false);
 
   // PayMongo-hosted GCash checkout state
   const [isGCashPaymentOpen, setIsGCashPaymentOpen] = useState(false);
@@ -474,6 +477,24 @@ export function CustomerPortal({
   }, [serviceRevision]);
 
   React.useEffect(() => {
+    let active = true;
+    void fetch('/api/payment-settings')
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok || typeof result.gcashEnabled !== 'boolean') {
+          throw new Error(result.error || 'Unable to load payment options.');
+        }
+        if (active) setGCashEnabled(result.gcashEnabled);
+      })
+      .catch((error: unknown) => {
+        console.error('Unable to load payment options:', error);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  React.useEffect(() => {
     const orderId = customerRequests[0]?.id;
     if (!orderId) return;
     let active = true;
@@ -527,6 +548,7 @@ export function CustomerPortal({
   const handleOpenNewRequest = (service?: CustomerServiceItem) => {
     setSelectedServiceForRequest(service || serviceCatalog[0] || null);
     setRequestQty(1);
+    setRequestPaymentMethod('Cash on Pickup');
     setRequestFileType('I have ready-to-print artwork file (PDF/PNG)');
     setRequestNotes('');
     setRequestFiles([]);
@@ -544,6 +566,7 @@ export function CustomerPortal({
         body: JSON.stringify({
           service: selectedServiceForRequest.id,
           quantity: requestQty,
+          paymentMethod: requestPaymentMethod,
           notes: requestNotes ? `${requestFileType} - ${requestNotes}` : requestFileType,
         }),
       });
@@ -601,7 +624,11 @@ export function CustomerPortal({
       ]);
       setRequestFiles([]);
       setIsNewRequestModalOpen(false);
-      openGCashPayment(savedOrder);
+      if (requestPaymentMethod === 'GCash') {
+        openGCashPayment(savedOrder);
+      } else {
+        setActiveTab('requests');
+      }
     } catch (error) {
       console.error('Unable to submit print request:', error);
       window.alert(error instanceof Error ? error.message : 'Unable to submit the request.');
@@ -609,6 +636,10 @@ export function CustomerPortal({
   };
 
   const openGCashPayment = (order?: RequestOrder) => {
+    if (!gcashEnabled) {
+      window.alert('GCash payments are currently unavailable. Please use Cash on Pickup.');
+      return;
+    }
     const target = order || requestsWithBalance[0] || customerRequests[0];
     if (!target) return;
     setTargetOrderForPayment(target);
@@ -1089,14 +1120,16 @@ export function CustomerPortal({
           items={sidebarItems}
           activeTab={activeTab}
           onSelectTab={(id) => setActiveTab(id as CustomerTabId)}
-          calloutBadge="GCASH SETTLEMENT"
-          calloutTitle="Pay Balance Anytime"
+          calloutBadge={gcashEnabled ? 'GCASH SETTLEMENT' : 'CASH ON PICKUP'}
+          calloutTitle={gcashEnabled ? 'Pay Balance Anytime' : 'GCash Unavailable'}
           calloutDesc={
-            unpaidBalance > 0
+            !gcashEnabled
+              ? 'GCash is not enabled yet. Choose Cash on Pickup for new orders.'
+              : unpaidBalance > 0
               ? `You have ₱${unpaidBalance.toLocaleString()} remaining balance. Submit a GCash reference for staff review.`
               : 'All your active orders are settled.'
           }
-          calloutButtonLabel="Pay Balance Now"
+          calloutButtonLabel={gcashEnabled ? 'Pay Balance Now' : 'GCash Disabled'}
           onCalloutAction={() => openGCashPayment()}
           userInitials={userInitials}
           userName={activeDisplayName}
@@ -1180,7 +1213,7 @@ export function CustomerPortal({
                 </div>
               </div>
 
-              {unpaidBalance > 0 && (
+              {unpaidBalance > 0 && gcashEnabled && (
                 <div className="p-5 rounded-2xl border bg-gradient-to-r from-blue-950 via-blue-900 to-indigo-950 border-blue-400 text-white flex flex-col sm:flex-row items-center justify-between gap-4 shadow-md">
                   <div className="flex items-start gap-3.5">
                     <div className="w-12 h-12 rounded-xl bg-blue-600 border border-blue-300 flex items-center justify-center shrink-0">
@@ -1226,6 +1259,9 @@ export function CustomerPortal({
                         {req.status}
                       </span>
                     </div>
+                    <p className="text-xs font-semibold text-zinc-600">
+                      Payment method: {req.paymentMethod ?? 'Not specified'}
+                    </p>
                     <div className="w-full bg-zinc-200 h-2.5 rounded-full overflow-hidden">
                       <div
                         className="bg-gradient-to-r from-[#D4A017] via-amber-500 to-emerald-500 h-full transition-all duration-500"
@@ -1243,7 +1279,7 @@ export function CustomerPortal({
                             ₱{req.unpaidAmount}
                           </strong>
                         </span>
-                        {req.unpaidAmount > 0 ? (
+                        {req.unpaidAmount > 0 && gcashEnabled ? (
                           <button
                             type="button"
                             onClick={() => openGCashPayment(req)}
@@ -1417,7 +1453,9 @@ export function CustomerPortal({
                       {req.status === 'Unpaid Balance'
                         ? req.unpaidAmount === 0
                           ? 'Paid — Awaiting Confirmation'
-                          : 'Awaiting Payment'
+                          : req.paymentMethod === 'Cash on Pickup'
+                            ? 'Awaiting Confirmation — Pay at Pickup'
+                            : 'Awaiting Payment'
                         : req.status}
                     </span>
                   </div>
@@ -1431,7 +1469,9 @@ export function CustomerPortal({
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                     <span className="text-xs sm:text-sm text-zinc-500">{req.notes}</span>
                     <div className="flex flex-wrap items-center gap-2">
-                      {req.unpaidAmount > 0 && req.status !== 'Cancelled' ? (
+                      {req.unpaidAmount > 0 &&
+                      req.status !== 'Cancelled' &&
+                      gcashEnabled ? (
                         <button
                           type="button"
                           onClick={() => openGCashPayment(req)}
@@ -1479,14 +1519,17 @@ export function CustomerPortal({
                   <h2 className="font-extrabold text-lg sm:text-xl">
                     GCash Payments &amp; Balance Settlement
                   </h2>
-                  <p className="text-sm text-blue-100 mt-1">
-                    Official NETSO GCash Number:{' '}
-                    <strong className="text-yellow-300 font-mono">
-                      0961-775-1907 (R*****o Jr. C.)
-                    </strong>
-                  </p>
+                  {gcashEnabled ? (
+                    <p className="text-sm text-blue-100 mt-1">
+                      GCash payment is available through secure PayMongo checkout.
+                    </p>
+                  ) : (
+                    <p className="text-sm text-blue-100 mt-1">
+                      GCash is currently unavailable. Choose Cash on Pickup when placing a new order.
+                    </p>
+                  )}
                 </div>
-                {unpaidBalance > 0 && (
+                {unpaidBalance > 0 && gcashEnabled && (
                   <button
                     type="button"
                     onClick={() => openGCashPayment()}
@@ -1508,6 +1551,9 @@ export function CustomerPortal({
                         {req.id}
                       </span>
                       <p className="font-extrabold text-base sm:text-lg mt-1.5">{req.service}</p>
+                      <p className="text-xs font-semibold text-zinc-600">
+                        Payment method: {req.paymentMethod ?? 'Not specified'}
+                      </p>
                       <span className="text-xs sm:text-sm text-zinc-500 font-mono">
                         GCash Ref: {req.gcashRefNo || 'Pending Checkout'}
                       </span>
@@ -1517,7 +1563,7 @@ export function CustomerPortal({
                         Paid: <strong className="text-emerald-700">₱{req.paidAmount}</strong> ·
                         Balance: <strong className="text-red-600">₱{req.unpaidAmount}</strong>
                       </div>
-                      {req.unpaidAmount > 0 ? (
+                      {req.unpaidAmount > 0 && gcashEnabled ? (
                         <button
                           type="button"
                           onClick={() => openGCashPayment(req)}
@@ -1764,6 +1810,32 @@ export function CustomerPortal({
                     Need full custom graphic design (+Layout Fee)
                   </option>
                 </select>
+              </div>
+
+              <div>
+                <label className="font-extrabold text-xs sm:text-sm text-zinc-900 block mb-1.5">
+                  Payment Method
+                </label>
+                <select
+                  value={requestPaymentMethod}
+                  onChange={(e) =>
+                    setRequestPaymentMethod(e.target.value as 'GCash' | 'Cash on Pickup')
+                  }
+                  className="w-full border border-zinc-400 bg-white px-3.5 py-2.5 rounded-xl font-bold text-sm sm:text-base text-zinc-950 focus:outline-none focus:ring-2 focus:ring-[#D4A017]"
+                >
+                  <option value="Cash on Pickup">Cash on Pickup</option>
+                  {gcashEnabled && <option value="GCash">GCash</option>}
+                </select>
+                <p className="mt-1.5 text-xs text-zinc-600">
+                  {requestPaymentMethod === 'Cash on Pickup'
+                    ? 'The order can be confirmed before payment. Please settle the balance when you pick it up.'
+                    : 'You will continue to secure PayMongo checkout after submitting your order.'}
+                </p>
+                {!gcashEnabled && (
+                  <p className="mt-1 text-xs font-bold text-amber-800">
+                    GCash is temporarily unavailable. You can still place orders with Cash on Pickup.
+                  </p>
+                )}
               </div>
 
               <div>

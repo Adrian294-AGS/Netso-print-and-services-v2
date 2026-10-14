@@ -36,7 +36,7 @@ export function ProductionQueue({
   }[] = [
     {
       title: '1. Awaiting Payment',
-      subtitle: 'Full payment required before confirmation',
+      subtitle: 'GCash requires payment; Cash on Pickup may be confirmed unpaid',
       status: 'Unpaid Balance',
       nextStatus: 'In Pre-Press',
       nextStage: 2,
@@ -173,10 +173,16 @@ export function ProductionQueue({
                       </button>
                       <button
                         type="button"
-                        disabled={col.nextStatus === 'In Pre-Press' && req.unpaidAmount > 0}
+                        disabled={
+                          col.nextStatus === 'In Pre-Press' &&
+                          req.unpaidAmount > 0 &&
+                          req.paymentMethod !== 'Cash on Pickup'
+                        }
                         title={
-                          col.nextStatus === 'In Pre-Press' && req.unpaidAmount > 0
-                            ? 'Verify the full payment before confirming this order.'
+                          col.nextStatus === 'In Pre-Press' &&
+                          req.unpaidAmount > 0 &&
+                          req.paymentMethod !== 'Cash on Pickup'
+                            ? 'Verify the full payment before confirming this GCash order.'
                             : undefined
                         }
                         onClick={() =>

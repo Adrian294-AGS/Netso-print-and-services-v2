@@ -8,6 +8,7 @@ import { publishRealtimeEvent } from '@/lib/server/realtime';
 import { isStaffRole, requireSession, type SessionUser } from '@/lib/server/auth';
 import { apiErrorResponse, ApiError, assertSameOrigin, readJson } from '@/lib/server/http';
 import { mysqlPool, queryRows } from '@/lib/server/mysql';
+import { isGCashPaymentEnabled } from '@/lib/server/payment-settings';
 
 export const runtime = 'nodejs';
 
@@ -19,6 +20,7 @@ const orderSchema = z.object({
   colorMode: z.enum(['Black & White', 'Colored']).optional(),
   finish: z.string().trim().max(255).optional(),
   notes: z.string().trim().max(5000).default(''),
+  paymentMethod: z.enum(['GCash', 'Cash on Pickup']).default('Cash on Pickup'),
   walkIn: z.boolean().optional(),
   customerName: z.string().trim().min(2).max(225).optional(),
   customerPhone: z.string().trim().min(7).max(32).optional(),
@@ -51,6 +53,7 @@ type OrderRow = {
   progress_stage: number;
   notes: string | null;
   created_at: Date;
+  payment_method: 'GCash' | 'Cash on Pickup' | null;
   paper_size: string | null;
   page_count: number | null;
   quantity: number;
@@ -88,6 +91,7 @@ function toClientOrder(row: OrderRow, files: Array<{ ID: number; original_file_n
     status: row.status,
     progressStage: row.progress_stage,
     notes: row.notes ?? '',
+    paymentMethod: row.payment_method ?? undefined,
     paymentVerified: paidAmount > 0,
     files: files.map((file) => ({
       id: String(file.ID),
@@ -222,7 +226,7 @@ async function loadClientOrders(user: SessionUser) {
     `SELECT o.ID, o.order_number, o.user_id, o.customer_name, o.customer_email, o.customer_phone,
             o.service_name_snapshot, c.category_name, o.total_amount,
             COALESCE(p.paid_amount, 0) AS paid_amount, o.status, o.progress_stage, o.notes,
-            o.created_at, o.paper_size, o.page_count, o.quantity, o.color_mode, o.finish
+            o.created_at, o.payment_method, o.paper_size, o.page_count, o.quantity, o.color_mode, o.finish
      FROM tbl_print_order o
      JOIN tbl_services s ON s.ID = o.service_id
      JOIN tbl_service_category c ON c.ID = s.category_id
@@ -265,6 +269,9 @@ export async function POST(request: NextRequest) {
     const input = parsed.data;
     if (input.walkIn && !isStaffRole(user.role)) throw new ApiError(403, 'Staff access is required for walk-in orders.');
     if (!input.walkIn && user.role !== 'customer') throw new ApiError(403, 'Customer access is required to place this order.');
+    if (input.paymentMethod === 'GCash' && !(await isGCashPaymentEnabled(connection))) {
+      throw new ApiError(409, 'GCash payments are not currently available. Please choose Cash on Pickup.');
+    }
 
     const services = await queryRows<
       { ID: number; service_name: string; category_name: string; base_price: string | number; is_active: number } & import('mysql2/promise').RowDataPacket
@@ -299,8 +306,8 @@ export async function POST(request: NextRequest) {
       `INSERT INTO tbl_print_order
         (order_number, user_id, service_id, customer_name, customer_email, customer_phone,
          service_name_snapshot, unit_price, quantity, page_count, paper_size, color_mode,
-         finish, notes, total_amount, status, progress_stage)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Unpaid Balance', 1)`,
+         finish, notes, total_amount, payment_method, status, progress_stage)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Unpaid Balance', 1)`,
       [
         orderNumber,
         input.walkIn ? null : user.id,
@@ -317,6 +324,7 @@ export async function POST(request: NextRequest) {
         input.finish ?? null,
         input.notes,
         total,
+        input.paymentMethod,
       ],
     );
     const insertId = (result as { insertId: number }).insertId;
@@ -367,6 +375,7 @@ export async function POST(request: NextRequest) {
           status: 'Unpaid Balance',
           progressStage: 1,
           notes: input.notes,
+          paymentMethod: input.paymentMethod,
           paymentVerified: false,
           files: [],
         },
@@ -397,10 +406,10 @@ export async function PATCH(request: NextRequest) {
 
     await connection.beginTransaction();
     const rows = await queryRows<
-      { ID: number; status: string; progress_stage: number; user_id: string | null; total_amount: string | number } & import('mysql2/promise').RowDataPacket
+      { ID: number; status: string; progress_stage: number; user_id: string | null; total_amount: string | number; payment_method: string | null } & import('mysql2/promise').RowDataPacket
     >(
       connection,
-      'SELECT ID, status, progress_stage, user_id, total_amount FROM tbl_print_order WHERE order_number = ? FOR UPDATE',
+      'SELECT ID, status, progress_stage, user_id, total_amount, payment_method FROM tbl_print_order WHERE order_number = ? FOR UPDATE',
       [orderNumber],
     );
     const order = rows[0];
@@ -411,7 +420,7 @@ export async function PATCH(request: NextRequest) {
       (order.status === 'Unpaid Balance' ||
         order.status === 'Cancelled' ||
         order.progress_stage < 2);
-    if (isConfirmingOrder) {
+    if (isConfirmingOrder && order.payment_method !== 'Cash on Pickup') {
       const paymentRows = await queryRows<
         { paid: string | number } & import('mysql2/promise').RowDataPacket
       >(
@@ -424,7 +433,7 @@ export async function PATCH(request: NextRequest) {
         Math.round(Number(paymentRows[0]?.paid ?? 0) * 100) <
         Math.round(Number(order.total_amount) * 100)
       ) {
-        throw new ApiError(409, 'The order can only be confirmed after the full payment is verified.');
+        throw new ApiError(409, 'GCash orders can only be confirmed after the full payment is verified.');
       }
     }
     await connection.execute(

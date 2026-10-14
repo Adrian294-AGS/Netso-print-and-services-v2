@@ -179,6 +179,9 @@ export function OrderManagement({
                 </td>
                 <td className="py-3 px-3.5">
                   <span className="font-bold block">{req.service}</span>
+                  <span className="text-[11px] font-semibold text-zinc-500">
+                    Payment: {req.paymentMethod ?? 'Not specified'}
+                  </span>
                   <span className="text-[11px] text-zinc-500 flex items-center gap-1 mt-0.5">
                     <Paperclip className="w-3 h-3 text-[#B8860B]" />
                     {req.files.length > 0
@@ -208,8 +211,10 @@ export function OrderManagement({
                   <select
                     value={req.status}
                     title={
-                      req.progressStage === 1 && req.unpaidAmount > 0
-                        ? 'Verify the full payment before confirming this order.'
+                      req.progressStage === 1 &&
+                      req.unpaidAmount > 0 &&
+                      req.paymentMethod !== 'Cash on Pickup'
+                        ? 'Verify the full payment before confirming this GCash order.'
                         : undefined
                     }
                     onChange={(e) => {
@@ -228,25 +233,41 @@ export function OrderManagement({
                     <option value="Unpaid Balance">● Awaiting Payment</option>
                     <option
                       value="In Pre-Press"
-                      disabled={req.progressStage === 1 && req.unpaidAmount > 0}
+                      disabled={
+                        req.progressStage === 1 &&
+                        req.unpaidAmount > 0 &&
+                        req.paymentMethod !== 'Cash on Pickup'
+                      }
                     >
                       ● In Pre-Press
                     </option>
                     <option
                       value="In Production"
-                      disabled={req.progressStage === 1 && req.unpaidAmount > 0}
+                      disabled={
+                        req.progressStage === 1 &&
+                        req.unpaidAmount > 0 &&
+                        req.paymentMethod !== 'Cash on Pickup'
+                      }
                     >
                       ● In Production
                     </option>
                     <option
                       value="Ready for Pickup"
-                      disabled={req.progressStage === 1 && req.unpaidAmount > 0}
+                      disabled={
+                        req.progressStage === 1 &&
+                        req.unpaidAmount > 0 &&
+                        req.paymentMethod !== 'Cash on Pickup'
+                      }
                     >
                       ✓ Ready for Pickup
                     </option>
                     <option
                       value="Completed"
-                      disabled={req.progressStage === 1 && req.unpaidAmount > 0}
+                      disabled={
+                        req.progressStage === 1 &&
+                        req.unpaidAmount > 0 &&
+                        req.paymentMethod !== 'Cash on Pickup'
+                      }
                     >
                       ✓ Completed
                     </option>

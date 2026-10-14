@@ -6,7 +6,7 @@ export const messages: Message[] = [
     id: 1,
     sender: 'staff',
     message:
-      'Hello Alexandrie! Your Tarpaulin service request (NETSO-90103) has been confirmed and is currently being processed by our staff.',
+      'Hello Your Tarpaulin service request (NETSO-90103) has been confirmed and is currently being processed by our staff.',
     time: '10:15 AM',
   },
   {

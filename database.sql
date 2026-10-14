@@ -203,6 +203,7 @@ CREATE TABLE IF NOT EXISTS tbl_print_order (
     finish                VARCHAR(255)   NULL,
     notes                 TEXT           NULL,
     total_amount          DECIMAL(10,2)  NOT NULL,
+    payment_method        VARCHAR(30)    NULL,
     status                VARCHAR(32)    NOT NULL DEFAULT 'Unpaid Balance',
     progress_stage        TINYINT UNSIGNED NOT NULL DEFAULT 1,
     created_at            DATETIME(3)    NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -216,6 +217,9 @@ CREATE TABLE IF NOT EXISTS tbl_print_order (
     CONSTRAINT chk_print_order_unit_price CHECK (unit_price >= 0),
     CONSTRAINT chk_print_order_quantity CHECK (quantity > 0),
     CONSTRAINT chk_print_order_total CHECK (total_amount >= 0),
+    CONSTRAINT chk_print_order_payment_method CHECK (
+        payment_method IS NULL OR payment_method IN ('GCash', 'Cash on Pickup')
+    ),
     CONSTRAINT chk_print_order_progress CHECK (progress_stage BETWEEN 1 AND 4),
     CONSTRAINT chk_print_order_status CHECK (
         status IN ('Unpaid Balance', 'In Pre-Press', 'In Production',
@@ -228,6 +232,18 @@ CREATE TABLE IF NOT EXISTS tbl_print_order (
         FOREIGN KEY (service_id) REFERENCES tbl_services (ID)
         ON DELETE RESTRICT ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS tbl_app_setting (
+    setting_key   VARCHAR(100) NOT NULL,
+    setting_value VARCHAR(255) NOT NULL,
+    updated_at    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
+                              ON UPDATE CURRENT_TIMESTAMP(3),
+    PRIMARY KEY (setting_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO tbl_app_setting (setting_key, setting_value)
+VALUES ('gcash_enabled', '0')
+ON DUPLICATE KEY UPDATE setting_key = VALUES(setting_key);
 
 CREATE TABLE IF NOT EXISTS tbl_print_order_file (
     ID                  BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,

@@ -109,7 +109,9 @@ export function AdminRequestDetailsModal({
 
   if (!order) return null;
   const requiresFullPayment =
-    order.progressStage < 2 && order.unpaidAmount > 0;
+    order.progressStage < 2 &&
+    order.unpaidAmount > 0 &&
+    order.paymentMethod !== 'Cash on Pickup';
   const paymentBlocksSelectedStatus =
     requiresFullPayment &&
     selectedStatus !== 'Unpaid Balance' &&
@@ -468,7 +470,7 @@ export function AdminRequestDetailsModal({
             </select>
             {requiresFullPayment && (
               <p className="text-xs font-bold text-amber-800">
-                Verify the full payment before confirming this order.
+                Verify the full payment before confirming this GCash order.
               </p>
             )}
 
@@ -490,7 +492,7 @@ export function AdminRequestDetailsModal({
                 disabled={paymentBlocksSelectedStatus}
                 title={
                   paymentBlocksSelectedStatus
-                    ? 'Verify the full payment before confirming this order.'
+                    ? 'Verify the full payment before confirming this GCash order.'
                     : undefined
                 }
                 className={`w-full sm:w-auto px-5 py-2.5 bg-[#D4A017] hover:bg-[#B8860B] text-black font-extrabold uppercase text-xs sm:text-sm rounded-xl border border-black flex items-center justify-center gap-1.5 shadow-xs shrink-0 transition-colors ${

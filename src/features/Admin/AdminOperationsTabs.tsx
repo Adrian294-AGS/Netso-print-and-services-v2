@@ -216,7 +216,7 @@ export function AdminPaymentsTab({
             Payment and order progress are separate
           </strong>
           <span className="font-medium text-zinc-700">
-            Only verified transactions count toward the paid total. PayMongo confirms automatically; staff review each manually recorded payment below. Full payment is required before order confirmation.
+            Only verified transactions count toward the paid total. PayMongo confirms automatically; staff review each manually recorded payment below. GCash orders require full payment before confirmation; Cash on Pickup orders may be confirmed with the balance due at pickup.
           </span>
         </div>
 

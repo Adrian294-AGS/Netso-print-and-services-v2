@@ -34,6 +34,12 @@ interface AdminDashboardProps {
   onNavigateTab: (tab: any, filter?: string) => void;
   onUpdateOrderStatus: (orderId: string, newStatus: OrderStatus, newStage: number) => void;
   onSelectOrder: (order: RequestOrder) => void;
+  isLeadAdmin: boolean;
+  gcashEnabled: boolean;
+  gcashSettingsLoaded: boolean;
+  gcashSettingsSaving: boolean;
+  gcashSettingsError: string;
+  onToggleGCash: () => void;
   highContrastMode: boolean;
   fontSizeLevel: FontSizeLevel;
 }
@@ -46,6 +52,12 @@ export function AdminDashboard({
   onNavigateTab,
   onUpdateOrderStatus,
   onSelectOrder,
+  isLeadAdmin,
+  gcashEnabled,
+  gcashSettingsLoaded,
+  gcashSettingsSaving,
+  gcashSettingsError,
+  onToggleGCash,
   highContrastMode,
 }: AdminDashboardProps) {
   return (
@@ -86,6 +98,39 @@ export function AdminDashboard({
           <span>+ Walk-In Request</span>
         </button>
       </div>
+
+      {isLeadAdmin && (
+        <section className="flex flex-col gap-4 rounded-2xl border border-amber-300 bg-amber-50 p-5 text-zinc-950 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-extrabold text-base sm:text-lg">GCash payment availability</h2>
+            <p className="mt-1 max-w-2xl text-sm text-zinc-700">
+              {gcashEnabled
+                ? 'Customers can pay online with GCash. Disable this until PayMongo and the owner’s GCash account are ready.'
+                : 'GCash is off. Customers can still submit orders using Cash on Pickup.'}
+            </p>
+            <p className="mt-1 text-xs font-bold text-zinc-600">
+              Current status: {gcashSettingsLoaded ? (gcashEnabled ? 'Enabled' : 'Disabled') : 'Loading…'}
+            </p>
+            {gcashSettingsError && (
+              <p role="alert" className="mt-2 text-sm font-bold text-red-700">
+                {gcashSettingsError}
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={onToggleGCash}
+            disabled={!gcashSettingsLoaded || gcashSettingsSaving}
+            className="shrink-0 rounded-xl border border-black bg-[#D4A017] px-5 py-3 font-extrabold text-black transition-colors hover:bg-[#E6B222] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {gcashSettingsSaving
+              ? 'Saving…'
+              : gcashEnabled
+                ? 'Disable GCash payments'
+                : 'Enable GCash payments'}
+          </button>
+        </section>
+      )}
 
       {/* 6 Summary Stat Cards */}
       <div className="space-y-3">
@@ -178,7 +223,7 @@ export function AdminDashboard({
                 ₱{stats.totalUnpaidAmount.toLocaleString()}
               </strong>{' '}
               in unpaid customer balances across {stats.unpaid} service orders. Enforce NETSO&apos;s
-              Payment First policy before releasing completed orders.
+              payment policy: confirm GCash orders after full payment and collect Cash on Pickup balances before release.
             </p>
           </div>
         </div>
@@ -252,7 +297,10 @@ export function AdminDashboard({
                       const isCurrent = req.progressStage === st.stage && req.status !== 'Completed';
                       const isReached = req.progressStage >= st.stage;
                       const confirmationBlocked =
-                        req.progressStage === 1 && req.unpaidAmount > 0 && st.stage > 1;
+                        req.progressStage === 1 &&
+                        req.unpaidAmount > 0 &&
+                        req.paymentMethod !== 'Cash on Pickup' &&
+                        st.stage > 1;
                       return (
                         <button
                           key={st.stage}
@@ -260,7 +308,7 @@ export function AdminDashboard({
                           disabled={confirmationBlocked}
                           title={
                             confirmationBlocked
-                              ? 'Verify the full payment before confirming this order.'
+                              ? 'Verify the full payment before confirming this GCash order.'
                               : undefined
                           }
                           onClick={() => onUpdateOrderStatus(req.id, st.status, st.stage)}

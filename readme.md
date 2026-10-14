@@ -134,9 +134,14 @@ Customers pay online through PayMongo Hosted Checkout using GCash. A signed PayM
 webhook confirms successful payments; browser redirects alone never mark an order as
 paid. Walk-in cash and manually recorded GCash references remain pending until an
 authorized staff member reviews them. A verified partial payment is recorded against
-the balance but does not permit staff to confirm the order; the verified payments
+the balance but does not permit staff to confirm GCash orders; verified payments
 must cover the full order total first. Payment and order changes are then refreshed
 for the customer and relevant staff through realtime updates.
+
+GCash checkout is disabled by default. The lead administrator can enable or disable
+it from the admin dashboard after the owner's PayMongo and GCash account setup is
+complete. Customers can still place orders using Cash on Pickup; those orders can be
+confirmed before payment, while the outstanding balance remains due at pickup.
 
 ### Local setup
 
@@ -145,6 +150,10 @@ for the customer and relevant staff through realtime updates.
 2. Create the MySQL database and import `database.sql` into it. The SQL file creates
    missing tables and seeds the service catalog; it does not alter an existing
    schema. Back up and apply reviewed migrations before changing an existing database.
+   For an existing installation, run the one-time
+   [`001_gcash_toggle_and_order_payment_method.sql`](./migrations/001_gcash_toggle_and_order_payment_method.sql)
+   migration before deploying this update. It adds the persistent GCash toggle
+   (initially disabled) and the order payment method field.
 3. Create a least-privilege MySQL application user with access only to this database
    and the `SELECT`, `INSERT`, `UPDATE`, and `DELETE` privileges used by the app.
    Use TLS and a non-empty password outside local development.

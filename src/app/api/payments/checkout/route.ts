@@ -7,6 +7,7 @@ import { requireSession } from '@/lib/server/auth';
 import { apiErrorResponse, ApiError, assertSameOrigin, readJson } from '@/lib/server/http';
 import { getPayMongoEnv } from '@/lib/server/env';
 import { mysqlPool, queryRows } from '@/lib/server/mysql';
+import { isGCashPaymentEnabled } from '@/lib/server/payment-settings';
 
 export const runtime = 'nodejs';
 
@@ -65,6 +66,9 @@ export async function POST(request: NextRequest) {
 
     try {
       await connection.beginTransaction();
+      if (!(await isGCashPaymentEnabled(connection))) {
+        throw new ApiError(409, 'GCash payments are not currently available. Please choose Cash on Pickup.');
+      }
       const orders = await queryRows<
         {
           ID: number;
