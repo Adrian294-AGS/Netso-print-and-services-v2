@@ -28,7 +28,7 @@ export const INITIAL_MESSAGES: ChatMessage[] = [
   {
     id: 'msg-1',
     sender: 'NETSO Staff',
-    text: 'Hello Alexandrie! Your Tarpaulin service request (NETSO-90103) has been confirmed and is currently being processed by our staff.',
+    text: 'Hello  Your Tarpaulin service request (NETSO-90103) has been confirmed and is currently being processed by our staff.',
     time: '10:15 AM',
     isStaff: true,
   },
