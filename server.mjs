@@ -57,7 +57,10 @@ const pool = mysql.createPool({
   bigNumberStrings: true,
   ssl:
     String(process.env.MYSQL_SSL).toLowerCase() === 'true'
-      ? { rejectUnauthorized: true }
+      ? {
+          rejectUnauthorized:
+            process.env.MYSQL_SSL_REJECT_UNAUTHORIZED?.toLowerCase() !== 'false',
+        }
       : undefined,
 });
 

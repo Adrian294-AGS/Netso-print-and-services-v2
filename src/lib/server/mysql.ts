@@ -24,7 +24,9 @@ export const mysqlPool =
     timezone: 'Z',
     supportBigNumbers: true,
     bigNumberStrings: true,
-    ssl: serverEnv.mysql.ssl ? { rejectUnauthorized: true } : undefined,
+    ssl: serverEnv.mysql.ssl
+      ? { rejectUnauthorized: serverEnv.mysql.sslRejectUnauthorized }
+      : undefined,
   });
 
 if (process.env.NODE_ENV !== 'production') {

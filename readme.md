@@ -201,6 +201,8 @@ Configure the MySQL, MongoDB, Google OAuth, B2, and PayMongo variables from
 `MYSQL_SSL=true` and `MONGODB_TLS=true`; production startup rejects disabled TLS,
 and the session cookie is Secure in production. Use managed database endpoints
 reachable from Render and allow Render's outbound IPs in database access controls.
+Keep `MYSQL_SSL_REJECT_UNAUTHORIZED=true` unless your database provider requires a
+self-signed certificate and you understand the certificate-verification tradeoff.
 
 Never prefix database, OAuth client-secret, JWT, or B2 credentials with
 `NEXT_PUBLIC_`; those values must remain server-only.
@@ -215,6 +217,9 @@ public HTTPS origin, and use one running replica while realtime events are held 
 process memory. Running multiple replicas requires adding a shared event broker
 before scaling; otherwise a client connected to one replica will not receive events
 published by another.
+Set `MYSQL_SSL=true`. If Railway's MySQL certificate is self-signed, set
+`MYSQL_SSL_REJECT_UNAUTHORIZED=false` to relax certificate verification for MySQL
+only; TLS remains enabled. Leave this unset or `true` when the certificate is trusted.
 
 The development command (`npm run dev`) also launches this combined server. Do not
 replace the start command with `next start`, because that would omit the WebSocket

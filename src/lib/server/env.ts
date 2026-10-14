@@ -32,6 +32,7 @@ function boolean(name: string, defaultValue: boolean): boolean {
 
 const isProduction = process.env.NODE_ENV === 'production';
 const mysqlSsl = boolean('MYSQL_SSL', isProduction);
+const mysqlSslRejectUnauthorized = boolean('MYSQL_SSL_REJECT_UNAUTHORIZED', true);
 const mongodbTls = boolean('MONGODB_TLS', isProduction);
 
 if (isProduction && !mysqlSsl) {
@@ -50,6 +51,7 @@ export const serverEnv = {
     user: required('MYSQL_USER'),
     password: process.env.MYSQL_PASSWORD ?? '',
     ssl: mysqlSsl,
+    sslRejectUnauthorized: mysqlSslRejectUnauthorized,
     connectionLimit: integer('MYSQL_CONNECTION_LIMIT', 10, 1),
     connectTimeout: integer('MYSQL_CONNECT_TIMEOUT_MS', 10_000, 1),
   },
