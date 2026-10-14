@@ -199,7 +199,7 @@ export function AdminUserLogsTab({
             <Lock className="w-4 h-4 text-blue-600" />
           </div>
           <span className="font-mono font-black text-xl sm:text-2xl block">{authEventsCount}</span>
-          <span className="text-[11px] text-zinc-500 font-semibold">tbl_user / tbl_oauth_account</span>
+          <span className="text-[11px] text-zinc-500 font-semibold">user / google oauth account</span>
         </div>
 
         <div

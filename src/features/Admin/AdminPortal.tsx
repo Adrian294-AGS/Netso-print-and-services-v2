@@ -265,7 +265,7 @@ export function AdminPortal({
     {
       id: 'orders',
       label: 'Service Requests',
-      desc: 'tbl_print_order & status control',
+      desc: 'Service requests & status control',
       icon: FileText,
       badge: requests.length,
     },
@@ -286,7 +286,7 @@ export function AdminPortal({
     {
       id: 'customers',
       label: 'Customer Directory',
-      desc: 'tbl_user accounts & spend',
+      desc: 'Customer accounts & spending history',
       icon: Users,
     },
     {
@@ -593,7 +593,7 @@ export function AdminPortal({
             <div className="border-b border-[#D4A017] pb-3">
               <h3 className="font-black text-lg sm:text-xl">+ Log Walk-In Service Request</h3>
               <p className="text-sm text-zinc-600 font-medium mt-0.5">
-                Creates a service request in tbl_print_order and logs the operator action in User Logs.
+                Creates a service request and logs the operator action in User Logs.
               </p>
             </div>
 

@@ -10,7 +10,10 @@ interface PaymentManagementProps {
   requests: RequestOrder[];
   payments: PaymentTransaction[];
   onSelectOrder: (order: RequestOrder) => void;
-  onReviewPayment: (paymentId: string, status: 'verified' | 'flagged') => void;
+  onReviewPayment: (
+    paymentId: string,
+    status: 'verified' | 'flagged'
+  ) => void;
   onRecordPayment: (orderId: string, amount: number) => void;
   highContrastMode: boolean;
   fontSizeLevel: FontSizeLevel;
