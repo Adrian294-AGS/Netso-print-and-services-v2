@@ -179,8 +179,8 @@ export function AdminRequestDetailsModal({
                 </h3>
               </div>
               <p className="text-xs text-zinc-500 font-semibold mt-1">
-                Submitted on {order.date} · Mapped to <strong>tbl_print_order</strong> &amp;{' '}
-                <strong>tbl_user</strong>
+                Submitted on {order.date} · Mapped to <strong>print order</strong> &amp;{' '}
+                <strong>customer account</strong>
               </p>
             </div>
           </div>
@@ -208,7 +208,7 @@ export function AdminRequestDetailsModal({
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-xs font-extrabold uppercase tracking-wider text-[#B8860B]">
-              Customer Information (tbl_user)
+              Customer Information
             </span>
             <button
               type="button"
@@ -245,7 +245,7 @@ export function AdminRequestDetailsModal({
           }`}
         >
           <span className="text-xs font-extrabold uppercase tracking-wider text-[#B8860B] block">
-            Service Information (tbl_print_order)
+            Service Information
           </span>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs sm:text-sm">
             <div className="min-w-0">
@@ -336,7 +336,7 @@ export function AdminRequestDetailsModal({
         <div className="p-3.5 rounded-xl border border-amber-300 bg-amber-50/80 text-zinc-950 space-y-2.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-xs font-extrabold uppercase tracking-wider text-[#B8860B]">
-              Payment Ledger (tbl_payment_intents / tbl_payments)
+              Payment Ledger
             </span>
             <span className="font-mono text-xs font-bold text-blue-900 bg-blue-100 px-2.5 py-0.5 rounded border border-blue-300">
               {order.paymongoId ? `Paymongo: ${order.paymongoId}` : 'Awaiting GCash Intent'}
@@ -589,7 +589,7 @@ export function AdminCustomerDetailModal({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
           <div className="p-3 rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-900 space-y-1 min-w-0">
             <span className="text-[10px] font-extrabold uppercase text-zinc-500 block">
-              Contact Info (tbl_user)
+              Contact Info
             </span>
             <p className="font-bold flex items-center gap-1.5">
               <Phone className="w-3.5 h-3.5 text-[#B8860B] shrink-0" />
