@@ -9,6 +9,12 @@ import { mysqlPool, queryRows } from '@/lib/server/mysql';
 
 export const runtime = 'nodejs';
 
+function encodeContentDispositionFilename(fileName: string): string {
+  return encodeURIComponent(fileName).replace(/[!'()*]/g, (character) =>
+    `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ fileId: string }> },
@@ -56,7 +62,7 @@ export async function GET(
       new GetObjectCommand({
         Bucket: bucket,
         Key: file.storage_key,
-        ResponseContentDisposition: `${viewInline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(file.original_file_name)}`,
+        ResponseContentDisposition: `${viewInline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeContentDispositionFilename(file.original_file_name)}`,
         ResponseContentType: mimeType,
       }),
       { expiresIn: 120 },
