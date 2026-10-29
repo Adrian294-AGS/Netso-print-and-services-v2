@@ -3,6 +3,7 @@ import {
   Printer,
   Check,
   Plus,
+  Trash2,
   Edit3,
 } from 'lucide-react';
 import { SERVICES_LIST, CatalogServiceItem } from '../../../data/services';
@@ -22,6 +23,16 @@ export function ServiceManagement({
   const [tempPrice, setTempPrice] = useState<number>(0);
   const [error, setError] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
+  const [editingDetailsId, setEditingDetailsId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    category: 'Document',
+    basePrice: '',
+    unit: '',
+    description: '',
+    popularFor: '',
+    turnaround: '',
+  });
   const [saving, setSaving] = useState(false);
   const [newService, setNewService] = useState({
     name: '',
@@ -136,6 +147,89 @@ export function ServiceManagement({
       setError(addError instanceof Error ? addError.message : 'Unable to add service.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const startEditDetails = (srv: CatalogServiceItem) => {
+    setError('');
+    setShowAddForm(false);
+    setEditingDetailsId(srv.id);
+    setEditForm({
+      name: srv.name,
+      category: srv.category,
+      basePrice: String(srv.basePrice),
+      unit: srv.unit,
+      description: srv.description,
+      popularFor: srv.popularFor,
+      turnaround: srv.turnaround,
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const saveEditedService = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!editingDetailsId) return;
+    setError('');
+    const price = Number(editForm.basePrice);
+    if (!Number.isFinite(price) || price < 0) {
+      setError('Enter a valid price.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const response = await fetch('/api/services', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingDetailsId,
+          name: editForm.name,
+          category: editForm.category,
+          basePrice: price,
+          unit: editForm.unit,
+          description: editForm.description,
+          popularFor: editForm.popularFor.trim(),
+          turnaround: editForm.turnaround,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Unable to save service details.');
+      setServices((prev) =>
+        prev.map((service) =>
+          service.id === editingDetailsId
+            ? {
+                ...service,
+                name: editForm.name.trim(),
+                category: editForm.category as CatalogServiceItem['category'],
+                basePrice: price,
+                unit: editForm.unit.trim(),
+                description: editForm.description.trim(),
+                popularFor: editForm.popularFor.trim(),
+                turnaround: editForm.turnaround.trim(),
+              }
+            : service
+        )
+      );
+      setEditingDetailsId(null);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save service details.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteService = async (srv: CatalogServiceItem) => {
+    if (!window.confirm(`Delete "${srv.name}"? This cannot be undone.`)) return;
+    setError('');
+    try {
+      const response = await fetch(`/api/services?id=${encodeURIComponent(srv.id)}`, {
+        method: 'DELETE',
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Unable to delete service.');
+      setServices((prev) => prev.filter((item) => item.id !== srv.id));
+      if (editingDetailsId === srv.id) setEditingDetailsId(null);
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete service.');
     }
   };
 
@@ -260,6 +354,89 @@ export function ServiceManagement({
         </form>
       )}
 
+      {editingDetailsId && (
+        <form
+          onSubmit={saveEditedService}
+          className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 rounded-2xl border border-[#D4A017] bg-white text-zinc-950"
+        >
+          <h2 className="sm:col-span-2 font-extrabold text-sm">Edit Service Details</h2>
+          <input
+            required
+            maxLength={150}
+            placeholder="Service name"
+            value={editForm.name}
+            onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+            className="border border-zinc-300 rounded-lg px-3 py-2 text-sm"
+          />
+          <select
+            value={editForm.category}
+            onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
+            className="border border-zinc-300 rounded-lg px-3 py-2 text-sm bg-white"
+          >
+            {['Document', 'Photo & ID', 'Large Format', 'Signage', 'Merch & Gifts', 'Marketing'].map((name) => (
+              <option key={name} value={name}>{name}</option>
+            ))}
+          </select>
+          <input
+            required
+            type="number"
+            min={0}
+            step="0.01"
+            placeholder="Price (PHP)"
+            value={editForm.basePrice}
+            onChange={(e) => setEditForm({ ...editForm, basePrice: e.target.value })}
+            className="border border-zinc-300 rounded-lg px-3 py-2 text-sm"
+          />
+          <input
+            required
+            maxLength={40}
+            placeholder="Unit (e.g. per page, per sq.ft)"
+            value={editForm.unit}
+            onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })}
+            className="border border-zinc-300 rounded-lg px-3 py-2 text-sm"
+          />
+          <input
+            required
+            maxLength={40}
+            placeholder="Turnaround (e.g. Same Day)"
+            value={editForm.turnaround}
+            onChange={(e) => setEditForm({ ...editForm, turnaround: e.target.value })}
+            className="border border-zinc-300 rounded-lg px-3 py-2 text-sm"
+          />
+          <input
+            maxLength={100}
+            placeholder="Popular for (optional)"
+            value={editForm.popularFor}
+            onChange={(e) => setEditForm({ ...editForm, popularFor: e.target.value })}
+            className="border border-zinc-300 rounded-lg px-3 py-2 text-sm"
+          />
+          <textarea
+            required
+            maxLength={1000}
+            placeholder="Description"
+            value={editForm.description}
+            onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+            className="sm:col-span-2 border border-zinc-300 rounded-lg px-3 py-2 text-sm"
+          />
+          <div className="sm:col-span-2 flex gap-2">
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 px-4 py-2 bg-[#D4A017] text-black font-extrabold text-sm rounded-xl border border-black cursor-pointer disabled:opacity-60"
+            >
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditingDetailsId(null)}
+              className="px-4 py-2 bg-zinc-100 text-zinc-900 font-extrabold text-sm rounded-xl border border-zinc-300 cursor-pointer"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+
       {error && <p role="alert" className="rounded-xl border border-red-400 bg-red-50 p-3 text-sm font-semibold text-red-800">{error}</p>}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
@@ -307,6 +484,25 @@ export function ServiceManagement({
                 <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">
                   {srv.description}
                 </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => startEditDetails(srv)}
+                  className="px-3 py-1.5 rounded-xl bg-zinc-100 hover:bg-amber-100 text-zinc-900 font-extrabold text-xs border border-zinc-300 flex items-center gap-1 cursor-pointer"
+                >
+                  <Edit3 className="w-3.5 h-3.5 text-[#B8860B]" />
+                  <span>Edit Details</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void deleteService(srv)}
+                  className="px-3 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-800 font-extrabold text-xs border border-red-300 flex items-center gap-1 cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete</span>
+                </button>
               </div>
 
               <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-2">
