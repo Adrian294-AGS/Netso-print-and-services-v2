@@ -459,7 +459,7 @@ export function CustomerPortal({
           turnaround: string;
           available: boolean;
         }) => {
-          const fallback = byId.get(service.id);
+          const fallback = byId.get(service.id) ?? { icon: Printer };
           return fallback
             ? [{ ...fallback, ...service, icon: fallback.icon }]
             : [];

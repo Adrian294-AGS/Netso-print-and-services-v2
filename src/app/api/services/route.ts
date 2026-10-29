@@ -40,6 +40,71 @@ export async function GET() {
   }
 }
 
+export async function POST(request: NextRequest) {
+  try {
+    assertSameOrigin(request);
+    const user = await requireSession(request, ['lead_admin']);
+    const body = await readJson(request);
+    const parsed = z.object({
+      name: z.string().trim().min(2).max(150),
+      category: z.string().trim().min(1).max(60),
+      basePrice: z.number().finite().min(0).max(1_000_000),
+      unit: z.string().trim().min(1).max(40),
+      description: z.string().trim().min(1).max(1000),
+      popularFor: z.string().trim().max(100).optional(),
+      turnaround: z.string().trim().min(1).max(40),
+      iconName: z.string().trim().max(50).optional(),
+    }).safeParse(body);
+    if (!parsed.success) throw new ApiError(400, 'Service details are invalid.');
+    const data = parsed.data;
+    const code = data.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 50);
+    if (!code) throw new ApiError(400, 'Service name must contain letters or numbers.');
+    const categories = await queryRows<{ ID: number } & import('mysql2/promise').RowDataPacket>(
+      mysqlPool,
+      'SELECT ID FROM tbl_service_category WHERE category_name = ?',
+      [data.category],
+    );
+    if (!categories.length) throw new ApiError(400, 'Service category is invalid.');
+    const existing = await queryRows<{ service_code: string } & import('mysql2/promise').RowDataPacket>(
+      mysqlPool,
+      'SELECT service_code FROM tbl_services WHERE service_code = ? OR service_name = ?',
+      [code, data.name],
+    );
+    if (existing.length) throw new ApiError(409, 'A service with this name already exists.');
+    await mysqlPool.execute(
+      `INSERT INTO tbl_services
+         (service_code, category_id, service_name, description, icon_name,
+          base_price, price_unit, popular_for, turnaround)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        code,
+        categories[0].ID,
+        data.name,
+        data.description,
+        data.iconName || null,
+        data.basePrice,
+        data.unit,
+        data.popularFor || null,
+        data.turnaround,
+      ],
+    );
+    await recordAuditEvent(request, user, {
+      category: 'Account / System',
+      action: 'Added service to catalog',
+      details: `${code}; price ₱${data.basePrice.toFixed(2)} ${data.unit}.`,
+      targetId: code,
+    });
+    publishRealtimeEvent({ topic: 'services', targetRoles: ['customer'] });
+    return NextResponse.json({ ok: true, id: code }, { status: 201 });
+  } catch (error) {
+    return apiErrorResponse(error);
+  }
+}
+
 export async function PATCH(request: NextRequest) {
   try {
     assertSameOrigin(request);
