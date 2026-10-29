@@ -105,6 +105,232 @@ export async function POST(request: NextRequest) {
   }
 }
 
+export async function PUT(request: NextRequest) {
+  try {
+    assertSameOrigin(request);
+    const user = await requireSession(request, ['lead_admin']);
+    const body = await readJson(request);
+    const parsed = z.object({
+      id: z.string().trim().min(1).max(50),
+      name: z.string().trim().min(2).max(150),
+      category: z.string().trim().min(1).max(60),
+      basePrice: z.number().finite().min(0).max(1_000_000),
+      unit: z.string().trim().min(1).max(40),
+      description: z.string().trim().min(1).max(1000),
+      popularFor: z.string().trim().max(100).optional(),
+      turnaround: z.string().trim().min(1).max(40),
+    }).safeParse(body);
+    if (!parsed.success) throw new ApiError(400, 'Service details are invalid.');
+    const data = parsed.data;
+    const current = await queryRows<{ service_code: string } & import('mysql2/promise').RowDataPacket>(
+      mysqlPool,
+      'SELECT service_code FROM tbl_services WHERE service_code = ?',
+      [data.id],
+    );
+    if (!current.length) throw new ApiError(404, 'Service not found.');
+    const categories = await queryRows<{ ID: number } & import('mysql2/promise').RowDataPacket>(
+      mysqlPool,
+      'SELECT ID FROM tbl_service_category WHERE category_name = ?',
+      [data.category],
+    );
+    if (!categories.length) throw new ApiError(400, 'Service category is invalid.');
+    const duplicate = await queryRows<{ service_code: string } & import('mysql2/promise').RowDataPacket>(
+      mysqlPool,
+      'SELECT service_code FROM tbl_services WHERE service_name = ? AND service_code <> ?',
+      [data.name, data.id],
+    );
+    if (duplicate.length) throw new ApiError(409, 'Another service already uses this name.');
+    await mysqlPool.execute(
+      `UPDATE tbl_services
+       SET category_id = ?, service_name = ?, description = ?, base_price = ?,
+           price_unit = ?, popular_for = ?, turnaround = ?
+       WHERE service_code = ?`,
+      [
+        categories[0].ID,
+        data.name,
+        data.description,
+        data.basePrice,
+        data.unit,
+        data.popularFor || null,
+        data.turnaround,
+        data.id,
+      ],
+    );
+    await recordAuditEvent(request, user, {
+      category: 'Account / System',
+      action: 'Edited service details',
+      details: `${data.id}; ${data.name}; price ₱${data.basePrice.toFixed(2)} ${data.unit}.`,
+      targetId: data.id,
+    });
+    publishRealtimeEvent({ topic: 'services', targetRoles: ['customer'] });
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return apiErrorResponse(error);
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    assertSameOrigin(request);
+    const user = await requireSession(request, ['lead_admin']);
+    const parsedId = z.string().trim().min(1).max(50).safeParse(
+      request.nextUrl.searchParams.get('id'),
+    );
+    if (!parsedId.success) throw new ApiError(400, 'Service id is invalid.');
+    const id = parsedId.data;
+    const found = await queryRows<
+      { ID: string | number; service_name: string } & import('mysql2/promise').RowDataPacket
+    >(
+      mysqlPool,
+      'SELECT ID, service_name FROM tbl_services WHERE service_code = ?',
+      [id],
+    );
+    if (!found.length) throw new ApiError(404, 'Service not found.');
+    const orderCount = await queryRows<
+      { total: number | string } & import('mysql2/promise').RowDataPacket
+    >(
+      mysqlPool,
+      'SELECT COUNT(*) AS total FROM tbl_print_order WHERE service_id = ?',
+      [found[0].ID],
+    );
+    const hasOrders = Number(orderCount[0]?.total ?? 0) > 0;
+    const inUseMessage =
+      'This service already has orders, so it cannot be deleted. Pause it instead so customers can no longer order it.';
+    if (hasOrders) throw new ApiError(409, inUseMessage);
+    try {
+      await mysqlPool.execute('DELETE FROM tbl_services WHERE service_code = ?', [id]);
+    } catch (deleteError) {
+      if ((deleteError as { code?: string }).code === 'ER_ROW_IS_REFERENCED_2') {
+        throw new ApiError(409, inUseMessage);
+      }
+      throw deleteError;
+    }
+    await recordAuditEvent(request, user, {
+      category: 'Account / System',
+      action: 'Deleted service from catalog',
+      details: `${id}; ${found[0].service_name}.`,
+      targetId: id,
+    });
+    publishRealtimeEvent({ topic: 'services', targetRoles: ['customer'] });
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return apiErrorResponse(error);
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  try {
+    assertSameOrigin(request);
+    const user = await requireSession(request, ['lead_admin']);
+    const body = await readJson(request);
+    const parsed = z.object({
+      id: z.string().trim().min(1).max(50),
+      name: z.string().trim().min(2).max(150),
+      category: z.string().trim().min(1).max(60),
+      basePrice: z.number().finite().min(0).max(1_000_000),
+      unit: z.string().trim().min(1).max(40),
+      description: z.string().trim().min(1).max(1000),
+      popularFor: z.string().trim().max(100).optional(),
+      turnaround: z.string().trim().min(1).max(40),
+    }).safeParse(body);
+    if (!parsed.success) throw new ApiError(400, 'Service details are invalid.');
+    const data = parsed.data;
+    const current = await queryRows<{ service_code: string } & import('mysql2/promise').RowDataPacket>(
+      mysqlPool,
+      'SELECT service_code FROM tbl_services WHERE service_code = ?',
+      [data.id],
+    );
+    if (!current.length) throw new ApiError(404, 'Service not found.');
+    const categories = await queryRows<{ ID: number } & import('mysql2/promise').RowDataPacket>(
+      mysqlPool,
+      'SELECT ID FROM tbl_service_category WHERE category_name = ?',
+      [data.category],
+    );
+    if (!categories.length) throw new ApiError(400, 'Service category is invalid.');
+    const duplicate = await queryRows<{ service_code: string } & import('mysql2/promise').RowDataPacket>(
+      mysqlPool,
+      'SELECT service_code FROM tbl_services WHERE service_name = ? AND service_code <> ?',
+      [data.name, data.id],
+    );
+    if (duplicate.length) throw new ApiError(409, 'Another service already uses this name.');
+    await mysqlPool.execute(
+      `UPDATE tbl_services
+       SET category_id = ?, service_name = ?, description = ?, base_price = ?,
+           price_unit = ?, popular_for = ?, turnaround = ?
+       WHERE service_code = ?`,
+      [
+        categories[0].ID,
+        data.name,
+        data.description,
+        data.basePrice,
+        data.unit,
+        data.popularFor || null,
+        data.turnaround,
+        data.id,
+      ],
+    );
+    await recordAuditEvent(request, user, {
+      category: 'Account / System',
+      action: 'Edited service details',
+      details: `${data.id}; ${data.name}; price ₱${data.basePrice.toFixed(2)} ${data.unit}.`,
+      targetId: data.id,
+    });
+    publishRealtimeEvent({ topic: 'services', targetRoles: ['customer'] });
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return apiErrorResponse(error);
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    assertSameOrigin(request);
+    const user = await requireSession(request, ['lead_admin']);
+    const parsedId = z.string().trim().min(1).max(50).safeParse(
+      request.nextUrl.searchParams.get('id'),
+    );
+    if (!parsedId.success) throw new ApiError(400, 'Service id is invalid.');
+    const id = parsedId.data;
+    const found = await queryRows<
+      { ID: string | number; service_name: string } & import('mysql2/promise').RowDataPacket
+    >(
+      mysqlPool,
+      'SELECT ID, service_name FROM tbl_services WHERE service_code = ?',
+      [id],
+    );
+    if (!found.length) throw new ApiError(404, 'Service not found.');
+    const orderCount = await queryRows<
+      { total: number | string } & import('mysql2/promise').RowDataPacket
+    >(
+      mysqlPool,
+      'SELECT COUNT(*) AS total FROM tbl_print_order WHERE service_id = ?',
+      [found[0].ID],
+    );
+    const hasOrders = Number(orderCount[0]?.total ?? 0) > 0;
+    const inUseMessage =
+      'This service already has orders, so it cannot be deleted. Pause it instead so customers can no longer order it.';
+    if (hasOrders) throw new ApiError(409, inUseMessage);
+    try {
+      await mysqlPool.execute('DELETE FROM tbl_services WHERE service_code = ?', [id]);
+    } catch (deleteError) {
+      if ((deleteError as { code?: string }).code === 'ER_ROW_IS_REFERENCED_2') {
+        throw new ApiError(409, inUseMessage);
+      }
+      throw deleteError;
+    }
+    await recordAuditEvent(request, user, {
+      category: 'Account / System',
+      action: 'Deleted service from catalog',
+      details: `${id}; ${found[0].service_name}.`,
+      targetId: id,
+    });
+    publishRealtimeEvent({ topic: 'services', targetRoles: ['customer'] });
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return apiErrorResponse(error);
+  }
+}
+
 export async function PATCH(request: NextRequest) {
   try {
     assertSameOrigin(request);
