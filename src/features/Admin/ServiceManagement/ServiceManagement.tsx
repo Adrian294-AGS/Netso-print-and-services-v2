@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   Printer,
   Check,
+  Plus,
   Edit3,
 } from 'lucide-react';
 import { SERVICES_LIST, CatalogServiceItem } from '../../../data/services';
@@ -20,6 +21,17 @@ export function ServiceManagement({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tempPrice, setTempPrice] = useState<number>(0);
   const [error, setError] = useState('');
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [newService, setNewService] = useState({
+    name: '',
+    category: 'Document',
+    basePrice: '',
+    unit: 'per page',
+    description: '',
+    popularFor: '',
+    turnaround: 'Same Day',
+  });
 
   useEffect(() => {
     let active = true;
@@ -40,7 +52,7 @@ export function ServiceManagement({
           available: boolean;
         }) => {
           const fallback = original.get(service.id);
-          return fallback ? [{ ...fallback, ...service, icon: fallback.icon }] : [];
+          return [{ ...fallback, ...service, icon: fallback?.icon ?? Printer }];
         });
         if (active) setServices(current);
       })
@@ -67,6 +79,63 @@ export function ServiceManagement({
       );
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : 'Unable to save service changes.');
+    }
+  };
+
+  const addService = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError('');
+    const price = Number(newService.basePrice);
+    if (!Number.isFinite(price) || price < 0) {
+      setError('Enter a valid price.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const response = await fetch('/api/services', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newService.name,
+          category: newService.category,
+          basePrice: price,
+          unit: newService.unit,
+          description: newService.description,
+          popularFor: newService.popularFor.trim() || undefined,
+          turnaround: newService.turnaround,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Unable to add service.');
+      setServices((prev) => [
+        ...prev,
+        {
+          id: result.id,
+          name: newService.name.trim(),
+          category: newService.category as CatalogServiceItem['category'],
+          icon: Printer,
+          basePrice: price,
+          unit: newService.unit.trim(),
+          description: newService.description.trim(),
+          popularFor: newService.popularFor.trim(),
+          turnaround: newService.turnaround.trim(),
+          available: true,
+        },
+      ]);
+      setNewService({
+        name: '',
+        category: 'Document',
+        basePrice: '',
+        unit: 'per page',
+        description: '',
+        popularFor: '',
+        turnaround: 'Same Day',
+      });
+      setShowAddForm(false);
+    } catch (addError) {
+      setError(addError instanceof Error ? addError.message : 'Unable to add service.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -106,6 +175,90 @@ export function ServiceManagement({
           </p>
         </div>
       </div>
+
+      <div>
+        <button
+          type="button"
+          onClick={() => setShowAddForm((open) => !open)}
+          className="px-4 py-2 bg-[#D4A017] text-black font-extrabold text-sm rounded-xl border border-black flex items-center gap-1.5 cursor-pointer"
+        >
+          <Plus className="w-4 h-4" />
+          <span>{showAddForm ? 'Cancel' : 'Add Service'}</span>
+        </button>
+      </div>
+
+      {showAddForm && (
+        <form
+          onSubmit={addService}
+          className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 rounded-2xl border border-[#D4A017] bg-white text-zinc-950"
+        >
+          <input
+            required
+            maxLength={150}
+            placeholder="Service name"
+            value={newService.name}
+            onChange={(e) => setNewService({ ...newService, name: e.target.value })}
+            className="border border-zinc-300 rounded-lg px-3 py-2 text-sm"
+          />
+          <select
+            value={newService.category}
+            onChange={(e) => setNewService({ ...newService, category: e.target.value })}
+            className="border border-zinc-300 rounded-lg px-3 py-2 text-sm bg-white"
+          >
+            {['Document', 'Photo & ID', 'Large Format', 'Signage', 'Merch & Gifts', 'Marketing'].map((name) => (
+              <option key={name} value={name}>{name}</option>
+            ))}
+          </select>
+          <input
+            required
+            type="number"
+            min={0}
+            step="0.01"
+            placeholder="Price (PHP)"
+            value={newService.basePrice}
+            onChange={(e) => setNewService({ ...newService, basePrice: e.target.value })}
+            className="border border-zinc-300 rounded-lg px-3 py-2 text-sm"
+          />
+          <input
+            required
+            maxLength={40}
+            placeholder="Unit (e.g. per page, per sq.ft)"
+            value={newService.unit}
+            onChange={(e) => setNewService({ ...newService, unit: e.target.value })}
+            className="border border-zinc-300 rounded-lg px-3 py-2 text-sm"
+          />
+          <input
+            required
+            maxLength={40}
+            placeholder="Turnaround (e.g. Same Day)"
+            value={newService.turnaround}
+            onChange={(e) => setNewService({ ...newService, turnaround: e.target.value })}
+            className="border border-zinc-300 rounded-lg px-3 py-2 text-sm"
+          />
+          <input
+            maxLength={100}
+            placeholder="Popular for (optional)"
+            value={newService.popularFor}
+            onChange={(e) => setNewService({ ...newService, popularFor: e.target.value })}
+            className="border border-zinc-300 rounded-lg px-3 py-2 text-sm"
+          />
+          <textarea
+            required
+            maxLength={1000}
+            placeholder="Description"
+            value={newService.description}
+            onChange={(e) => setNewService({ ...newService, description: e.target.value })}
+            className="sm:col-span-2 border border-zinc-300 rounded-lg px-3 py-2 text-sm"
+          />
+          <button
+            type="submit"
+            disabled={saving}
+            className="sm:col-span-2 px-4 py-2 bg-[#D4A017] text-black font-extrabold text-sm rounded-xl border border-black cursor-pointer disabled:opacity-60"
+          >
+            {saving ? 'Saving...' : 'Save Service'}
+          </button>
+        </form>
+      )}
 
       {error && <p role="alert" className="rounded-xl border border-red-400 bg-red-50 p-3 text-sm font-semibold text-red-800">{error}</p>}
 
