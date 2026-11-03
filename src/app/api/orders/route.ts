@@ -310,13 +310,13 @@ export async function POST(request: NextRequest) {
     await ensureServiceCatalog();
     const serviceOptions = await loadOptionsForService(connection, service.ID);
     let unitPrice = Number(service.base_price);
-    let computedTotal = unitPrice * input.quantity;
+    let computedTotal = unitPrice * input.quantity * (input.pages ?? 1);
     let optionLabel: string | null = null;
     if (serviceOptions.length > 0 && !input.walkIn) {
       const option = serviceOptions.find((item) => item.id === input.optionId && item.available);
       if (!option) throw new ApiError(400, 'Please choose an available size or package for this service.');
       const quote = computeQuote(option, {
-        qty: input.quantity,
+        qty: input.quantity * (input.pages ?? 1),
         width: input.width,
         height: input.height,
       });
