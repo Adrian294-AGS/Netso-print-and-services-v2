@@ -562,7 +562,7 @@ export function CustomerPortal({
   const selectedRequestOption = requestOptions.find((option) => option.id === requestOptionId) ?? null;
   const requestQuote = selectedRequestOption
     ? computeQuote(selectedRequestOption, {
-        qty: requestQty,
+        qty: requestPages * requestQty,
         width: Number(requestWidth),
         height: Number(requestHeight),
       })
@@ -570,14 +570,14 @@ export function CustomerPortal({
   const requestTotal = requestQuote
     ? requestQuote.total
     : selectedServiceForRequest
-      ? selectedServiceForRequest.basePrice * requestQty
+      ? selectedServiceForRequest.basePrice * requestPages * requestQty
       : 0;
   const requestDimUnit = selectedRequestOption?.unit.includes('sq.in') ? 'in' : 'ft';
 
   React.useEffect(() => {
     if (!isNewRequestModalOpen) return;
     const minQty = selectedRequestOption?.minQty ?? 1;
-    setRequestQty((current) => Math.max(current, minQty));
+    setRequestQty((current) => Math.max(current, Math.ceil(minQty / Math.max(1, requestPages))));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNewRequestModalOpen, selectedServiceForRequest?.id, requestOptionId]);
 
@@ -1919,7 +1919,7 @@ export function CustomerPortal({
               )}
               <div>
                 <label className="font-extrabold text-xs sm:text-sm text-zinc-900 block mb-1.5">
-                  Pages / Copies{selectedRequestOption && selectedRequestOption.minQty > 1 ? ` (min ${selectedRequestOption.minQty})` : ''}
+                  Pages / Copies{selectedRequestOption && selectedRequestOption.minQty > 1 ? ` (min ${selectedRequestOption.minQty} pieces in total)` : ''}
                 </label>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -1946,7 +1946,7 @@ export function CustomerPortal({
                   </div>
                   <div>
                     <label className="font-extrabold text-xs sm:text-sm text-zinc-900 block mb-1.5">
-                      Copies{selectedRequestOption && selectedRequestOption.minQty > 1 ? ` (min ${selectedRequestOption.minQty})` : ''}
+                      Copies (of the whole set)
                     </label>
                     <input
                       type="number"
