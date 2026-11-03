@@ -568,9 +568,9 @@ export function CustomerPortal({
       })
     : null;
   const requestTotal = requestQuote
-    ? requestQuote.total * requestPages
+    ? requestQuote.total
     : selectedServiceForRequest
-      ? selectedServiceForRequest.basePrice * requestPages * requestQty
+      ? selectedServiceForRequest.basePrice * requestQty
       : 0;
   const requestDimUnit = selectedRequestOption?.unit.includes('sq.in') ? 'in' : 'ft';
 
@@ -585,7 +585,7 @@ export function CustomerPortal({
     try {
       setIsDetectingPages(true);
       const pdfjsLib = await import('pdfjs-dist');
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+      pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
       
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -2018,6 +2018,8 @@ export function CustomerPortal({
                     const pdfFile = files.find(f => f.ext === 'pdf')?.file;
                     if (pdfFile) {
                       void detectPdfPages(pdfFile);
+                    } else {
+                      setRequestPages(1);
                     }
                   }}
                   fontSizeLevel={fontSizeLevel}
