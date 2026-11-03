@@ -401,6 +401,7 @@ export function CustomerPortal({
   const [selectedServiceForRequest, setSelectedServiceForRequest] =
     useState<CustomerServiceItem | null>(null);
   const [requestQty, setRequestQty] = useState<number>(1);
+  const [requestPages, setRequestPages] = useState<number>(1);
   const [requestOptionId, setRequestOptionId] = useState<string>('');
   const [requestWidth, setRequestWidth] = useState<string>('');
   const [requestHeight, setRequestHeight] = useState<string>('');
@@ -412,6 +413,7 @@ export function CustomerPortal({
   const [requestPaymentMethod, setRequestPaymentMethod] =
     useState<'GCash' | 'Cash on Pickup'>('Cash on Pickup');
   const [gcashEnabled, setGCashEnabled] = useState(false);
+  const [isDetectingPages, setIsDetectingPages] = useState(false);
 
   // PayMongo-hosted GCash checkout state
   const [isGCashPaymentOpen, setIsGCashPaymentOpen] = useState(false);
@@ -566,9 +568,9 @@ export function CustomerPortal({
       })
     : null;
   const requestTotal = requestQuote
-    ? requestQuote.total
+    ? requestQuote.total * requestPages
     : selectedServiceForRequest
-      ? selectedServiceForRequest.basePrice * requestQty
+      ? selectedServiceForRequest.basePrice * requestPages * requestQty
       : 0;
   const requestDimUnit = selectedRequestOption?.unit.includes('sq.in') ? 'in' : 'ft';
 
@@ -579,6 +581,25 @@ export function CustomerPortal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNewRequestModalOpen, selectedServiceForRequest?.id, requestOptionId]);
 
+  const detectPdfPages = async (file: File) => {
+    try {
+      setIsDetectingPages(true);
+      const pdfjsLib = await import('pdfjs-dist');
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+      
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const pageCount = pdf.numPages;
+      
+      setRequestPages(pageCount);
+      setIsDetectingPages(false);
+    } catch (error) {
+      console.error('Error detecting PDF pages:', error);
+      setIsDetectingPages(false);
+      setRequestPages(1);
+    }
+  };
+
   const handleOpenNewRequest = (service?: CustomerServiceItem) => {
     const initialService = service || serviceCatalog[0] || null;
     setSelectedServiceForRequest(initialService);
@@ -586,6 +607,7 @@ export function CustomerPortal({
     setRequestWidth('');
     setRequestHeight('');
     setRequestQty(1);
+    setRequestPages(1);
     setRequestPaymentMethod('Cash on Pickup');
     setRequestFileType('I have ready-to-print artwork file (PDF/PNG)');
     setRequestNotes('');
@@ -607,6 +629,7 @@ export function CustomerPortal({
         body: JSON.stringify({
           service: selectedServiceForRequest.id,
           quantity: requestQty,
+          pages: requestPages,
           optionId: requestOptionId || undefined,
           width: selectedRequestOption?.pricingMode === 'area' ? Number(requestWidth) : undefined,
           height: selectedRequestOption?.pricingMode === 'area' ? Number(requestHeight) : undefined,
@@ -1896,15 +1919,44 @@ export function CustomerPortal({
               )}
               <div>
                 <label className="font-extrabold text-xs sm:text-sm text-zinc-900 block mb-1.5">
-                  Quantity / Copies{selectedRequestOption && selectedRequestOption.minQty > 1 ? ` (minimum ${selectedRequestOption.minQty})` : ''}
+                  Pages / Copies{selectedRequestOption && selectedRequestOption.minQty > 1 ? ` (min ${selectedRequestOption.minQty})` : ''}
                 </label>
-                <input
-                  type="number"
-                  min={1}
-                  value={requestQty}
-                  onChange={(e) => setRequestQty(Math.max(1, parseInt(e.target.value) || 1))}
-                  className="w-full border border-zinc-400 bg-white px-3.5 py-2.5 rounded-xl font-mono font-bold text-sm sm:text-base text-zinc-950 focus:outline-none focus:ring-2 focus:ring-[#D4A017]"
-                />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-extrabold text-xs sm:text-sm text-zinc-900 block mb-1.5">
+                      Pages
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min={1}
+                        value={requestPages}
+                        onChange={(e) => setRequestPages(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-full border border-zinc-400 bg-white px-3.5 py-2.5 rounded-xl font-mono font-bold text-sm sm:text-base text-zinc-950 focus:outline-none focus:ring-2 focus:ring-[#D4A017]"
+                      />
+                      {isDetectingPages && (
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                          <Loader2 className="w-4 h-4 animate-spin text-[#B8860B]" />
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-xs text-zinc-500 mt-1">
+                      {isDetectingPages ? 'Detecting...' : 'Auto-detected from PDF'}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="font-extrabold text-xs sm:text-sm text-zinc-900 block mb-1.5">
+                      Copies{selectedRequestOption && selectedRequestOption.minQty > 1 ? ` (min ${selectedRequestOption.minQty})` : ''}
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={requestQty}
+                      onChange={(e) => setRequestQty(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-full border border-zinc-400 bg-white px-3.5 py-2.5 rounded-xl font-mono font-bold text-sm sm:text-base text-zinc-950 focus:outline-none focus:ring-2 focus:ring-[#D4A017]"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div>
@@ -1961,7 +2013,13 @@ export function CustomerPortal({
                 </label>
                 <FileUploader
                   files={requestFiles}
-                  onChange={setRequestFiles}
+                  onChange={(files) => {
+                    setRequestFiles(files);
+                    const pdfFile = files.find(f => f.ext === 'pdf')?.file;
+                    if (pdfFile) {
+                      void detectPdfPages(pdfFile);
+                    }
+                  }}
                   fontSizeLevel={fontSizeLevel}
                 />
               </div>
@@ -1988,10 +2046,10 @@ export function CustomerPortal({
                     {requestQuote && !requestQuote.ok
                       ? requestQuote.error
                       : selectedRequestOption?.pricingMode === 'area'
-                        ? 'Width × Height × Rate × Quantity'
+                        ? 'Width × Height × Rate × Pages × Copies'
                         : selectedRequestOption
-                          ? 'Option price (by quantity) × Quantity'
-                          : 'Base Price × Quantity'}
+                          ? 'Option price × Pages × Copies'
+                          : 'Base Price × Pages × Copies'}
                   </span>
                 </div>
                 <span className="font-mono font-black text-2xl sm:text-3xl text-[#B8860B]">
