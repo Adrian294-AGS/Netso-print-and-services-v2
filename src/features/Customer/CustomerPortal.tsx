@@ -39,11 +39,14 @@ import {
 } from '../../types/portal';
 import { Header } from '../../components/Header';
 import { Sidebar } from '../../components/Sidebar';
+import { computeQuote, describeOption, startingFrom, type ServiceOption } from '@/lib/pricing';
+import { iconFor } from '@/lib/service-icons';
 
 export type { FontSizeLevel } from '../../types/portal';
 type CustomerTabId = 'dashboard' | 'services' | 'requests' | 'payments' | 'messages' | 'profile';
 
 export interface CustomerServiceItem {
+  options?: ServiceOption[];
   id: string;
   name: string;
   category: 'Document' | 'Photo & ID' | 'Large Format' | 'Signage' | 'Merch & Gifts' | 'Marketing';
@@ -398,6 +401,9 @@ export function CustomerPortal({
   const [selectedServiceForRequest, setSelectedServiceForRequest] =
     useState<CustomerServiceItem | null>(null);
   const [requestQty, setRequestQty] = useState<number>(1);
+  const [requestOptionId, setRequestOptionId] = useState<string>('');
+  const [requestWidth, setRequestWidth] = useState<string>('');
+  const [requestHeight, setRequestHeight] = useState<string>('');
   const [requestFileType, setRequestFileType] = useState<string>(
     'I have ready-to-print artwork file (PDF/PNG)'
   );
@@ -461,10 +467,17 @@ export function CustomerPortal({
         }) => {
           const fallback = byId.get(service.id) ?? { icon: Printer };
           return fallback
-            ? [{ ...fallback, ...service, icon: fallback.icon }]
+            ? [{
+                ...fallback,
+                ...service,
+                options: (service as { options?: ServiceOption[] }).options ?? [],
+                icon: iconFor((service as { iconName?: string | null }).iconName, fallback.icon),
+              }]
             : [];
         });
-        if (active) setServiceCatalog(fromApi);
+        if (active) {
+          setServiceCatalog(fromApi.filter((item: CustomerServiceItem) => item.available !== false));
+        }
       })
       .catch((error: unknown) => console.error('Unable to load service catalog:', error));
     return () => {
@@ -543,8 +556,35 @@ export function CustomerPortal({
     });
   }, [serviceCatalog, selectedCategory, searchQuery]);
 
+  const requestOptions = selectedServiceForRequest?.options?.filter((option) => option.available) ?? [];
+  const selectedRequestOption = requestOptions.find((option) => option.id === requestOptionId) ?? null;
+  const requestQuote = selectedRequestOption
+    ? computeQuote(selectedRequestOption, {
+        qty: requestQty,
+        width: Number(requestWidth),
+        height: Number(requestHeight),
+      })
+    : null;
+  const requestTotal = requestQuote
+    ? requestQuote.total
+    : selectedServiceForRequest
+      ? selectedServiceForRequest.basePrice * requestQty
+      : 0;
+  const requestDimUnit = selectedRequestOption?.unit.includes('sq.in') ? 'in' : 'ft';
+
+  React.useEffect(() => {
+    if (!isNewRequestModalOpen) return;
+    const minQty = selectedRequestOption?.minQty ?? 1;
+    setRequestQty((current) => Math.max(current, minQty));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNewRequestModalOpen, selectedServiceForRequest?.id, requestOptionId]);
+
   const handleOpenNewRequest = (service?: CustomerServiceItem) => {
-    setSelectedServiceForRequest(service || serviceCatalog[0] || null);
+    const initialService = service || serviceCatalog[0] || null;
+    setSelectedServiceForRequest(initialService);
+    setRequestOptionId(initialService?.options?.find((option) => option.available)?.id ?? '');
+    setRequestWidth('');
+    setRequestHeight('');
     setRequestQty(1);
     setRequestPaymentMethod('Cash on Pickup');
     setRequestFileType('I have ready-to-print artwork file (PDF/PNG)');
@@ -558,12 +598,18 @@ export function CustomerPortal({
     if (!selectedServiceForRequest) return;
 
     try {
+      if (requestQuote && !requestQuote.ok) {
+        throw new Error(requestQuote.error ?? 'Check the quantity and size.');
+      }
       const orderResponse = await fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           service: selectedServiceForRequest.id,
           quantity: requestQty,
+          optionId: requestOptionId || undefined,
+          width: selectedRequestOption?.pricingMode === 'area' ? Number(requestWidth) : undefined,
+          height: selectedRequestOption?.pricingMode === 'area' ? Number(requestHeight) : undefined,
           paymentMethod: requestPaymentMethod,
           notes: requestNotes ? `${requestFileType} - ${requestNotes}` : requestFileType,
         }),
@@ -1353,7 +1399,9 @@ export function CustomerPortal({
                             <Icon className="w-6 h-6" />
                           </div>
                           <span className="bg-zinc-950 text-[#D4A017] font-mono font-black px-3 py-1.5 rounded-lg text-sm">
-                            ₱{srv.basePrice} {srv.unit}
+                            {srv.options && srv.options.length > 0
+                              ? `From ₱${startingFrom(srv.options).price.toLocaleString()} ${startingFrom(srv.options).unit}`
+                              : `₱${srv.basePrice} ${srv.unit}`}
                           </span>
                         </div>
                         <h3 className="font-extrabold text-lg mt-3">{srv.name}</h3>
@@ -1771,13 +1819,20 @@ export function CustomerPortal({
                   value={selectedServiceForRequest.id}
                   onChange={(e) => {
                     const found = serviceCatalog.find((s) => s.id === e.target.value);
-                    if (found) setSelectedServiceForRequest(found);
+                    if (found) {
+                      setSelectedServiceForRequest(found);
+                      setRequestOptionId(found.options?.find((option) => option.available)?.id ?? '');
+                      setRequestWidth('');
+                      setRequestHeight('');
+                    }
                   }}
                   className="w-full border border-zinc-400 bg-white px-3.5 py-2.5 rounded-xl font-bold text-sm sm:text-base text-zinc-950 focus:outline-none focus:ring-2 focus:ring-[#D4A017]"
                 >
                   {serviceCatalog.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.name} — ₱{s.basePrice} ({s.unit})
+                      {s.options && s.options.length > 0
+                        ? s.name
+                        : `${s.name} — ₱${s.basePrice} (${s.unit})`}
                     </option>
                   ))}
                 </select>
@@ -1785,7 +1840,63 @@ export function CustomerPortal({
 
               <div>
                 <label className="font-extrabold text-xs sm:text-sm text-zinc-900 block mb-1.5">
-                  Quantity / Copies
+                  {requestOptions.length > 0 ? 'Choose Size / Package' : ''}
+                </label>
+                {requestOptions.length > 0 && (
+                  <>
+                    <select
+                      value={requestOptionId}
+                      onChange={(e) => setRequestOptionId(e.target.value)}
+                      className="w-full border border-zinc-400 bg-white px-3.5 py-2.5 rounded-xl font-bold text-sm sm:text-base text-zinc-950 focus:outline-none focus:ring-2 focus:ring-[#D4A017]"
+                    >
+                      {requestOptions.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    {selectedRequestOption && (
+                      <p className="mt-1.5 text-xs text-zinc-600">
+                        {describeOption(selectedRequestOption)}
+                        {selectedRequestOption.note ? ` · ${selectedRequestOption.note}` : ''}
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+              {selectedRequestOption?.pricingMode === 'area' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-extrabold text-xs sm:text-sm text-zinc-900 block mb-1.5">
+                      Width ({requestDimUnit})
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      step="any"
+                      value={requestWidth}
+                      onChange={(e) => setRequestWidth(e.target.value)}
+                      className="w-full border border-zinc-400 bg-white px-3.5 py-2.5 rounded-xl font-mono font-bold text-sm sm:text-base text-zinc-950 focus:outline-none focus:ring-2 focus:ring-[#D4A017]"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-extrabold text-xs sm:text-sm text-zinc-900 block mb-1.5">
+                      Height ({requestDimUnit})
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      step="any"
+                      value={requestHeight}
+                      onChange={(e) => setRequestHeight(e.target.value)}
+                      className="w-full border border-zinc-400 bg-white px-3.5 py-2.5 rounded-xl font-mono font-bold text-sm sm:text-base text-zinc-950 focus:outline-none focus:ring-2 focus:ring-[#D4A017]"
+                    />
+                  </div>
+                </div>
+              )}
+              <div>
+                <label className="font-extrabold text-xs sm:text-sm text-zinc-900 block mb-1.5">
+                  Quantity / Copies{selectedRequestOption && selectedRequestOption.minQty > 1 ? ` (minimum ${selectedRequestOption.minQty})` : ''}
                 </label>
                 <input
                   type="number"
@@ -1874,11 +1985,17 @@ export function CustomerPortal({
                     Estimated Total Cost:
                   </span>
                   <span className="text-xs text-zinc-600 font-medium block">
-                    Base Price × Quantity
+                    {requestQuote && !requestQuote.ok
+                      ? requestQuote.error
+                      : selectedRequestOption?.pricingMode === 'area'
+                        ? 'Width × Height × Rate × Quantity'
+                        : selectedRequestOption
+                          ? 'Option price (by quantity) × Quantity'
+                          : 'Base Price × Quantity'}
                   </span>
                 </div>
                 <span className="font-mono font-black text-2xl sm:text-3xl text-[#B8860B]">
-                  ₱{(selectedServiceForRequest.basePrice * requestQty).toLocaleString()}
+                  ₱{(requestQuote && !requestQuote.ok ? 0 : requestTotal).toLocaleString(undefined, { maximumFractionDigits: 2 })}
                 </span>
               </div>
 

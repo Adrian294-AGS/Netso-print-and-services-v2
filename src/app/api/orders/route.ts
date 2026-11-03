@@ -10,6 +10,8 @@ import { apiErrorResponse, ApiError, assertSameOrigin, readJson } from '@/lib/se
 import { mysqlPool, queryRows } from '@/lib/server/mysql';
 import { isGCashPaymentEnabled } from '@/lib/server/payment-settings';
 import { recordAuditEvent } from '@/lib/server/audit';
+import { computeQuote } from '@/lib/pricing';
+import { ensureServiceCatalog, loadOptionsForService } from '@/lib/server/service-options';
 
 export const runtime = 'nodejs';
 
@@ -20,6 +22,9 @@ const orderSchema = z.object({
   paperSize: z.string().trim().max(100).optional(),
   colorMode: z.enum(['Black & White', 'Colored']).optional(),
   finish: z.string().trim().max(255).optional(),
+  optionId: z.string().trim().max(60).optional(),
+  width: z.number().positive().max(100000).optional(),
+  height: z.number().positive().max(100000).optional(),
   notes: z.string().trim().max(5000).default(''),
   paymentMethod: z.enum(['GCash', 'Cash on Pickup']).default('Cash on Pickup'),
   walkIn: z.boolean().optional(),
@@ -302,7 +307,25 @@ export async function POST(request: NextRequest) {
       input.walkIn
         ? input.customerName!
         : [account?.first_name, account?.middle_name, account?.last_name].filter(Boolean).join(' ') || user.email || 'Customer';
-    const total = input.walkIn ? input.amount ?? 0 : Number(service.base_price) * input.quantity;
+    await ensureServiceCatalog();
+    const serviceOptions = await loadOptionsForService(connection, service.ID);
+    let unitPrice = Number(service.base_price);
+    let computedTotal = unitPrice * input.quantity;
+    let optionLabel: string | null = null;
+    if (serviceOptions.length > 0 && !input.walkIn) {
+      const option = serviceOptions.find((item) => item.id === input.optionId && item.available);
+      if (!option) throw new ApiError(400, 'Please choose an available size or package for this service.');
+      const quote = computeQuote(option, {
+        qty: input.quantity,
+        width: input.width,
+        height: input.height,
+      });
+      if (!quote.ok) throw new ApiError(400, quote.error ?? 'Order quantity or size is invalid.');
+      unitPrice = quote.unitPrice;
+      computedTotal = quote.total;
+      optionLabel = quote.area ? `${option.label} (${input.width} x ${input.height})` : option.label;
+    }
+    const total = input.walkIn ? input.amount ?? 0 : computedTotal;
     const walkInPaid = input.walkIn ? input.paidAmount ?? 0 : 0;
     if (!total || walkInPaid > total) throw new ApiError(400, 'Order amount or initial payment is invalid.');
     const orderNumber = `NETSO-${Date.now().toString(36).toUpperCase()}-${randomBytes(3).toString('hex').toUpperCase()}`;
@@ -322,10 +345,10 @@ export async function POST(request: NextRequest) {
         input.walkIn ? input.customerEmail ?? null : account?.email,
         input.walkIn ? input.customerPhone ?? null : account?.mobile_number,
         service.service_name,
-        service.base_price,
+        unitPrice,
         input.quantity,
         input.pages ?? null,
-        input.paperSize ?? null,
+        optionLabel ?? input.paperSize ?? null,
         input.colorMode ?? null,
         input.finish ?? null,
         input.notes,
