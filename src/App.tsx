@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type {
   RequestOrder,
   OrderStatus,
@@ -14,6 +14,7 @@ import type { AuthenticatedUser } from './features/Authentication/Authentication
 import { AdminPortal } from './features/Admin/AdminPortal';
 import { CustomerPortal } from './features/Customer/CustomerPortal';
 import Authentication from './features/Authentication/Authentication';
+import { useFeedback } from './components/feedback/FeedbackProvider';
 
 export interface AppProps {
   initialRoute?: 'login' | 'customer' | 'admin';
@@ -56,6 +57,7 @@ async function apiRequest<T>(url: string, options?: RequestInit): Promise<ApiRes
 }
 
 export default function App({ customerTab, adminTab }: AppProps = {}) {
+  const { confirm, notify } = useFeedback();
   const [user, setUser] = useState<AuthenticatedUser | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [fontSizeLevel, setFontSizeLevel] = useState<FontSizeLevel>('large');
@@ -70,10 +72,8 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
   const [userLogsPage, setUserLogsPage] = useState(1);
   const [userLogsLoading, setUserLogsLoading] = useState(false);
   const [notifications, setNotifications] = useState<RealtimeNotification[]>([]);
-  const [liveNotice, setLiveNotice] = useState('');
   const [serviceRevision, setServiceRevision] = useState(0);
   const [financialReportRevision, setFinancialReportRevision] = useState(0);
-  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadAuditLogs = async (page: number) => {
     setUserLogsLoading(true);
@@ -242,9 +242,7 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
             unread: true,
           };
           setNotifications((current) => [notification, ...current].slice(0, 50));
-          setLiveNotice(event.notification.text);
-          if (noticeTimer.current) clearTimeout(noticeTimer.current);
-          noticeTimer.current = setTimeout(() => setLiveNotice(''), 5000);
+          notify(event.notification.text, 'info');
         }
       };
       socket.onclose = () => {
@@ -259,10 +257,9 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
     return () => {
       disposed = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
-      if (noticeTimer.current) clearTimeout(noticeTimer.current);
       socket?.close();
     };
-  }, [user]);
+  }, [user, notify]);
 
   const refreshOrders = async () => {
     const result = await apiRequest<{ orders: RequestOrder[] }>('/api/orders');
@@ -272,7 +269,7 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
   const handleUserLogsPageChange = (page: number) => {
     void loadAuditLogs(page).catch((error: unknown) => {
       console.error('Unable to load audit log page:', error);
-      window.alert(error instanceof Error ? error.message : 'Unable to load audit logs.');
+      notify(error instanceof Error ? error.message : 'Unable to load audit logs.', 'error');
     });
   };
 
@@ -290,8 +287,9 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
       await refreshOrders();
     } catch (error) {
       console.error('Unable to update order status:', error);
-      window.alert(
+      notify(
         error instanceof Error ? error.message : 'Unable to update the order status.',
+        'error',
       );
     }
   };
@@ -308,7 +306,7 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
       await Promise.all([refreshOrders(), refreshPayments()]);
     } catch (error) {
       console.error('Unable to review payment transaction:', error);
-      window.alert(error instanceof Error ? error.message : 'Unable to review this payment.');
+      notify(error instanceof Error ? error.message : 'Unable to review this payment.', 'error');
     }
   };
 
@@ -318,9 +316,12 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
   };
 
   const handleRecordPayment = async (orderId: string, amount: number) => {
-    if (!window.confirm(`Confirm receipt of ₱${amount.toFixed(2)} in cash for request ${orderId}?`)) {
-      return;
-    }
+    const accepted = await confirm({
+      title: 'Confirm cash payment',
+      message: `Confirm receipt of ₱${amount.toFixed(2)} in cash for request ${orderId}?`,
+      confirmLabel: 'Confirm receipt',
+    });
+    if (!accepted) return;
     try {
       await apiRequest('/api/payments', {
         method: 'POST',
@@ -334,7 +335,7 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
       await Promise.all([refreshOrders(), refreshPayments()]);
     } catch (error) {
       console.error('Unable to record payment:', error);
-      window.alert(error instanceof Error ? error.message : 'Unable to record this payment.');
+      notify(error instanceof Error ? error.message : 'Unable to record this payment.', 'error');
     }
   };
 
@@ -350,7 +351,7 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
       setThreads(result.threads);
     } catch (error) {
       console.error('Unable to send staff reply:', error);
-      window.alert(error instanceof Error ? error.message : 'Unable to send staff reply.');
+      notify(error instanceof Error ? error.message : 'Unable to send staff reply.', 'error');
     }
   };
 
@@ -370,7 +371,7 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
       );
     } catch (error) {
       console.error('Unable to mark conversation as read:', error);
-      window.alert(error instanceof Error ? error.message : 'Unable to update conversation status.');
+      notify(error instanceof Error ? error.message : 'Unable to update conversation status.', 'error');
     }
   };
 
@@ -419,7 +420,7 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
       }
     } catch (error) {
       console.error('Walk-in request was saved, but portal data could not be refreshed:', error);
-      window.alert(`Request ${result.order.id} was saved, but the latest list could not be refreshed.`);
+      notify(`Request ${result.order.id} was saved, but the latest list could not be refreshed.`, 'error');
     }
   };
 
@@ -473,9 +474,7 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
 
   if (user.role === 'customer') {
     return (
-      <>
-        {liveNotice && <RealtimeToast message={liveNotice} onClose={() => setLiveNotice('')} />}
-        <CustomerPortal
+      <CustomerPortal
           currentUser={{
             id: user.id,
             name: user.name,
@@ -494,14 +493,11 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
           setHighContrastMode={setHighContrastMode}
           onLogout={handleLogout}
         />
-      </>
     );
   }
 
   return (
-    <>
-      {liveNotice && <RealtimeToast message={liveNotice} onClose={() => setLiveNotice('')} />}
-      <AdminPortal
+    <AdminPortal
         currentUser={user}
         requests={requests}
         customers={customers}
@@ -529,17 +525,5 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
         setHighContrastMode={setHighContrastMode}
         onLogout={handleLogout}
       />
-    </>
-  );
-}
-
-function RealtimeToast({ message, onClose }: { message: string; onClose: () => void }) {
-  return (
-    <div role="status" className="fixed right-4 top-4 z-[100] flex max-w-sm items-start gap-3 rounded-xl border border-amber-400 bg-neutral-950 px-4 py-3 text-sm font-semibold text-white shadow-2xl">
-      <span>{message}</span>
-      <button type="button" onClick={onClose} className="shrink-0 text-amber-300" aria-label="Dismiss notification">
-        ×
-      </button>
-    </div>
   );
 }

@@ -36,9 +36,11 @@ import {
   RequestOrder,
   UploadedFile,
   FontSizeLevel,
+  MessageThread,
 } from '../../types/portal';
 import { Header } from '../../components/Header';
 import { Sidebar } from '../../components/Sidebar';
+import { useFeedback } from '../../components/feedback/FeedbackProvider';
 import { computeQuote, describeOption, sortedTiers, type ServiceOption } from '@/lib/pricing';
 import { iconFor } from '@/lib/service-icons';
 
@@ -371,6 +373,7 @@ export function CustomerPortal({
   requests: externalRequests,
   setRequests: externalSetRequests,
 }: CustomerPortalProps) {
+  const { confirm, notify } = useFeedback();
   const requests = externalRequests;
   const setRequests = externalSetRequests;
 
@@ -429,6 +432,7 @@ export function CustomerPortal({
     orderId: string;
     messages: Array<{ sender: string; text: string; time: string; isStaff: boolean }>;
   }>({ orderId: '', messages: [] });
+  const [customerThreads, setCustomerThreads] = useState<MessageThread[]>([]);
   const [selectedMessageOrderId, setSelectedMessageOrderId] = useState('');
   const [newMessageInput, setNewMessageInput] = useState('');
   const [accountUsername, setAccountUsername] = useState(currentUser.username);
@@ -455,10 +459,19 @@ export function CustomerPortal({
         : customerRequests.filter((request) => request.status === requestStatusFilter),
     [customerRequests, requestStatusFilter],
   );
-  const messageOrderId = customerRequests.some((request) => request.id === selectedMessageOrderId)
-    ? selectedMessageOrderId
-    : customerRequests[0]?.id || '';
+  const hasGeneralConversation = customerThreads.some(
+    (thread) => thread.conversationType === 'general' || thread.requestId === 'General Inquiry',
+  );
+  const messageConversationId =
+    selectedMessageOrderId === 'general' ||
+    (customerRequests.length === 0 && !selectedMessageOrderId)
+      ? 'general'
+      : customerRequests.some((request) => request.id === selectedMessageOrderId)
+        ? selectedMessageOrderId
+        : customerRequests[0]?.id ?? (hasGeneralConversation ? 'general' : '');
+  const messageOrderId = messageConversationId === 'general' ? '' : messageConversationId;
   const messages = messageState.orderId === messageOrderId ? messageState.messages : [];
+  const customerUnreadCount = customerThreads.filter((thread) => thread.customerUnread).length;
 
   React.useEffect(() => {
     let active = true;
@@ -518,6 +531,32 @@ export function CustomerPortal({
   }, []);
 
   React.useEffect(() => {
+    let active = true;
+    void fetch('/api/messages')
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Unable to load message notifications.');
+        if (!active || !Array.isArray(result.threads)) return;
+        setCustomerThreads((current) =>
+          result.threads.map((thread: MessageThread) => {
+            const previous = current.find((item) => item.id === thread.id);
+            return previous &&
+              !previous.customerUnread &&
+              previous.lastUpdated === thread.lastUpdated
+              ? { ...thread, customerUnread: false }
+              : thread;
+          }),
+        );
+      })
+      .catch((error: unknown) =>
+        console.error('Unable to load customer message notifications:', error),
+      );
+    return () => {
+      active = false;
+    };
+  }, [messageRevision]);
+
+  React.useEffect(() => {
     const orderId = messageOrderId;
     let active = true;
     const endpoint = orderId
@@ -527,23 +566,43 @@ export function CustomerPortal({
       .then(async (response) => {
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'Unable to load messages.');
+        const thread = result.thread as MessageThread | null;
         if (active) {
           setMessageState({
             orderId: orderId ?? '',
-            messages: (result.thread?.messages ?? []).map((message: {
-              sender: string;
-              text: string;
-              time: string;
-              isStaff: boolean;
-            }) => ({ ...message, time: new Date(message.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) })),
+            messages: (thread?.messages ?? []).map((message) => ({
+              ...message,
+              time: new Date(message.time).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+              }),
+            })),
           });
+        }
+        if (active && activeTab === 'messages' && thread?.customerUnread) {
+          const markResponse = await fetch('/api/messages', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ threadId: thread.id }),
+          });
+          const markResult = await markResponse.json();
+          if (!markResponse.ok) {
+            throw new Error(markResult.error || 'Unable to mark the staff reply as read.');
+          }
+          if (active) {
+            setCustomerThreads((current) =>
+              current.map((item) =>
+                item.id === thread.id ? { ...item, customerUnread: false } : item,
+              ),
+            );
+          }
         }
       })
       .catch((error: unknown) => console.error('Unable to load customer messages:', error));
     return () => {
       active = false;
     };
-  }, [messageOrderId, messageRevision]);
+  }, [activeTab, messageOrderId, messageRevision]);
 
   const totalPaid = useMemo(
     () => customerRequests.reduce((sum, r) => sum + r.paidAmount, 0),
@@ -711,13 +770,13 @@ export function CustomerPortal({
       }
     } catch (error) {
       console.error('Unable to submit print request:', error);
-      window.alert(error instanceof Error ? error.message : 'Unable to submit the request.');
+      notify(error instanceof Error ? error.message : 'Unable to submit the request.', 'error');
     }
   };
 
   const openGCashPayment = (order?: RequestOrder) => {
     if (!gcashEnabled) {
-      window.alert('GCash payments are currently unavailable. Please use Cash on Pickup.');
+      notify('GCash payments are currently unavailable. Please use Cash on Pickup.', 'error');
       return;
     }
     const target = order || requestsWithBalance[0] || customerRequests[0];
@@ -732,11 +791,17 @@ export function CustomerPortal({
     if (
       order.status !== 'Unpaid Balance' ||
       order.progressStage !== 1 ||
-      order.paidAmount > 0 ||
-      !window.confirm(`Permanently delete unpaid request ${order.id}? This cannot be undone.`)
+      order.paidAmount > 0
     ) {
       return;
     }
+    const accepted = await confirm({
+      title: 'Delete unpaid request?',
+      message: `Permanently delete unpaid request ${order.id}? This cannot be undone.`,
+      confirmLabel: 'Delete request',
+      destructive: true,
+    });
+    if (!accepted) return;
 
     setDeletingRequestId(order.id);
     try {
@@ -756,11 +821,14 @@ export function CustomerPortal({
       }
       if (selectedOrderForReceipt?.id === order.id) setSelectedOrderForReceipt(null);
       if (result.storageCleanupWarning) {
-        window.alert(result.error || 'The request was deleted, but its stored files could not be removed.');
+        notify(
+          result.error || 'The request was deleted, but its stored files could not be removed.',
+          'error',
+        );
       }
     } catch (error) {
       console.error('Unable to delete service request:', error);
-      window.alert(error instanceof Error ? error.message : 'Unable to delete this request.');
+      notify(error instanceof Error ? error.message : 'Unable to delete this request.', 'error');
     } finally {
       setDeletingRequestId(null);
     }
@@ -796,11 +864,13 @@ export function CustomerPortal({
         result.reused &&
         result.payment &&
         result.payment.paymentType !== selectedPaymentType &&
-        !window.confirm(
-          `An existing ${result.payment.paymentType} checkout for ₱${Number(
+        !(await confirm({
+          title: 'Continue existing GCash checkout?',
+          message: `An existing ${result.payment.paymentType} checkout for ₱${Number(
             result.payment.amount,
           ).toLocaleString()} is still open. Continue with that checkout?`,
-        )
+          confirmLabel: 'Continue checkout',
+        }))
       ) {
         setPaymentStep('select');
         return;
@@ -809,7 +879,7 @@ export function CustomerPortal({
     } catch (error) {
       console.error('Unable to start PayMongo GCash checkout:', error);
       setPaymentStep('select');
-      window.alert(error instanceof Error ? error.message : 'Unable to start GCash checkout.');
+      notify(error instanceof Error ? error.message : 'Unable to start GCash checkout.', 'error');
     }
   };
 
@@ -824,19 +894,25 @@ export function CustomerPortal({
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Unable to send message.');
+      const thread = result.thread as MessageThread;
       setMessageState({
         orderId,
-        messages: result.thread.messages.map((message: {
-          sender: string;
-          text: string;
-          time: string;
-          isStaff: boolean;
-        }) => ({ ...message, time: new Date(message.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) })),
+        messages: thread.messages.map((message) => ({
+          ...message,
+          time: new Date(message.time).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+        })),
       });
+      setCustomerThreads((current) => [
+        { ...thread, customerUnread: false },
+        ...current.filter((item) => item.id !== thread.id),
+      ]);
       setNewMessageInput('');
     } catch (error) {
       console.error('Unable to send message:', error);
-      window.alert(error instanceof Error ? error.message : 'Unable to send message.');
+      notify(error instanceof Error ? error.message : 'Unable to send message.', 'error');
     }
   };
 
@@ -1157,7 +1233,12 @@ export function CustomerPortal({
     { id: 'services', label: 'Service Catalog', icon: Printer },
     { id: 'requests', label: 'My Requests', icon: FileText, badge: requestsWithBalance.length },
     { id: 'payments', label: 'GCash Payments', icon: Wallet },
-    { id: 'messages', label: 'Chat Staff', icon: MessageSquare },
+    {
+      id: 'messages',
+      label: 'Chat Staff',
+      icon: MessageSquare,
+      badge: customerUnreadCount || undefined,
+    },
   ];
 
   const sidebarItems = [
@@ -1190,6 +1271,7 @@ export function CustomerPortal({
       id: 'messages',
       label: 'Staff Live Chat',
       icon: MessageSquare,
+      badge: customerUnreadCount || undefined,
       desc: 'Inquiries & design proofs',
     },
     {
@@ -1722,15 +1804,33 @@ export function CustomerPortal({
                   <label className="mt-2 flex flex-col gap-1 text-xs font-bold text-zinc-700">
                     Order conversation
                     <select
-                      value={messageOrderId}
+                      value={messageConversationId}
                       onChange={(event) => setSelectedMessageOrderId(event.target.value)}
                       className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-950"
                     >
                       {customerRequests.map((request) => (
                         <option key={request.id} value={request.id}>
                           {request.id} · {request.service} · {request.status}
+                          {customerThreads.some(
+                            (thread) => thread.requestId === request.id && thread.customerUnread,
+                          )
+                            ? ' · New reply'
+                            : ''}
                         </option>
                       ))}
+                      {hasGeneralConversation && (
+                        <option value="general">
+                          General conversation
+                          {customerThreads.some(
+                            (thread) =>
+                              (thread.conversationType === 'general' ||
+                                thread.requestId === 'General Inquiry') &&
+                              thread.customerUnread,
+                          )
+                            ? ' · New reply'
+                            : ''}
+                        </option>
+                      )}
                     </select>
                     <span className="font-medium text-zinc-500">
                       Conversations remain available for completed orders.
@@ -1900,7 +2000,12 @@ export function CustomerPortal({
           { id: 'services', label: 'Catalog', icon: Printer },
           { id: 'requests', label: 'Requests', icon: FileText, badge: requestsWithBalance.length },
           { id: 'payments', label: 'GCash', icon: Wallet },
-          { id: 'messages', label: 'Chat', icon: MessageSquare },
+          {
+            id: 'messages',
+            label: 'Chat',
+            icon: MessageSquare,
+            badge: customerUnreadCount || undefined,
+          },
           { id: 'profile', label: 'Profile', icon: User },
         ].map((tab) => {
           const Icon = tab.icon;

@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Plus, Trash2, Edit3 } from 'lucide-react';
 import { FontSizeLevel } from '../../../types';
+import { useFeedback } from '../../../components/feedback/FeedbackProvider';
 import {
   describeOption,
   formatTiers,
@@ -62,6 +63,7 @@ export function ServiceManagement({
   highContrastMode,
   fontSizeLevel,
 }: ServiceManagementProps) {
+  const { confirm } = useFeedback();
   const [services, setServices] = useState<AdminService[]>([]);
   const [form, setForm] = useState<ServiceForm | null>(null);
   const [error, setError] = useState('');
@@ -228,7 +230,13 @@ export function ServiceManagement({
   };
 
   const deleteService = async (service: AdminService) => {
-    if (!window.confirm(`Delete "${service.name}"? This cannot be undone.`)) return;
+    const accepted = await confirm({
+      title: 'Delete service?',
+      message: `Delete "${service.name}"? This cannot be undone.`,
+      confirmLabel: 'Delete service',
+      destructive: true,
+    });
+    if (!accepted) return;
     setError('');
     try {
       const response = await fetch(`/api/services?id=${encodeURIComponent(service.id)}`, {
