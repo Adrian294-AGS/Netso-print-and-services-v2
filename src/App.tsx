@@ -318,6 +318,9 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
   };
 
   const handleRecordPayment = async (orderId: string, amount: number) => {
+    if (!window.confirm(`Confirm receipt of ₱${amount.toFixed(2)} in cash for request ${orderId}?`)) {
+      return;
+    }
     try {
       await apiRequest('/api/payments', {
         method: 'POST',
@@ -369,23 +372,48 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
     paidAmount: number,
     notes: string,
   ) => {
+    const result = await apiRequest<{ order: RequestOrder }>('/api/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        walkIn: true,
+        customerName,
+        customerPhone,
+        service: service.replace(/\s*\([^)]*\)\s*$/, ''),
+        amount,
+        paidAmount,
+        notes,
+      }),
+    });
+    setRequests((current) => [
+      result.order,
+      ...current.filter((request) => request.id !== result.order.id),
+    ]);
     try {
-      await apiRequest('/api/orders', {
-        method: 'POST',
-        body: JSON.stringify({
-          walkIn: true,
-          customerName,
-          customerPhone,
-          service: service.replace(/\s*\([^)]*\)\s*$/, ''),
-          amount,
-          paidAmount,
-          notes,
-        }),
-      });
-      await Promise.all([refreshOrders(), refreshPayments()]);
+      await refreshOrders();
+      if (user?.staffRole === 'lead_admin' || user?.staffRole === 'front_desk_cashier') {
+        await refreshPayments();
+      }
     } catch (error) {
-      console.error('Unable to create walk-in order:', error);
+      console.error('Walk-in request was saved, but portal data could not be refreshed:', error);
+      window.alert(`Request ${result.order.id} was saved, but the latest list could not be refreshed.`);
     }
+  };
+
+  const handleProfileUpdated = (profile: {
+    name: string;
+    username: string | null;
+    email: string | null;
+  }) => {
+    setUser((current) =>
+      current
+        ? {
+            ...current,
+            name: profile.name,
+            username: profile.username,
+            identifier: profile.email ?? profile.username ?? current.identifier,
+          }
+        : current,
+    );
   };
 
   const handleAuthenticated = (authenticatedUser: AuthenticatedUser) => {
@@ -430,6 +458,7 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
             username: user.username ?? user.identifier.split('@')[0] ?? user.identifier,
             email: user.identifier,
           }}
+          onProfileUpdated={handleProfileUpdated}
           initialTab={customerTab || 'dashboard'}
           serviceRevision={serviceRevision}
           messageRevision={messageRevision}

@@ -89,7 +89,7 @@ interface AdminPortalProps {
     amount: number,
     paidAmount: number,
     notes: string
-  ) => void;
+  ) => Promise<void>;
   fontSizeLevel: FontSizeLevel;
   setFontSizeLevel: (level: FontSizeLevel) => void;
   highContrastMode: boolean;
@@ -227,6 +227,7 @@ export function AdminPortal({
   const [walkInAmount, setWalkInAmount] = useState(0);
   const [walkInPaid, setWalkInPaid] = useState(0);
   const [walkInNotes, setWalkInNotes] = useState('');
+  const [isCreatingWalkIn, setIsCreatingWalkIn] = useState(false);
 
   const [isNotifOpen, setIsNotifOpen] = useState(false);
 
@@ -273,19 +274,32 @@ export function AdminPortal({
     onLogout?.();
   };
 
-  const handleWalkInSubmit = (e: React.FormEvent) => {
+  const handleWalkInSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!walkInName.trim()) return;
-    onCreateWalkInOrder(
-      walkInName.trim(),
-      walkInPhone.trim(),
-      walkInService,
-      walkInAmount,
-      walkInPaid,
-      walkInNotes
-    );
-    setWalkInName('');
-    setIsWalkInModalOpen(false);
+    if (!walkInName.trim() || !walkInService.trim() || walkInAmount <= 0 || isCreatingWalkIn) return;
+    setIsCreatingWalkIn(true);
+    try {
+      await onCreateWalkInOrder(
+        walkInName.trim(),
+        walkInPhone.trim(),
+        walkInService,
+        walkInAmount,
+        walkInPaid,
+        walkInNotes
+      );
+      setWalkInName('');
+      setWalkInPhone('');
+      setWalkInService('');
+      setWalkInAmount(0);
+      setWalkInPaid(0);
+      setWalkInNotes('');
+      setIsWalkInModalOpen(false);
+    } catch (error) {
+      console.error('Unable to create walk-in request:', error);
+      window.alert(error instanceof Error ? error.message : 'Unable to save the walk-in request.');
+    } finally {
+      setIsCreatingWalkIn(false);
+    }
   };
 
   const operatorInitials = activeOperator.name
@@ -647,6 +661,7 @@ export function AdminPortal({
           <div className="bg-white border border-black rounded-t-2xl sm:rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl text-zinc-950 relative">
             <button
               type="button"
+              disabled={isCreatingWalkIn}
               onClick={() => setIsWalkInModalOpen(false)}
               className="absolute top-4 right-4 text-zinc-500 hover:text-black"
             >
@@ -686,6 +701,7 @@ export function AdminPortal({
                 <input
                   type="text"
                   value={walkInService}
+                  required
                   onChange={(e) => setWalkInService(e.target.value)}
                   className="w-full border border-zinc-400 p-3 rounded-xl font-bold"
                 />
@@ -696,16 +712,23 @@ export function AdminPortal({
                   <input
                     type="number"
                     min={1}
+                    max={100000000}
+                    required
                     value={walkInAmount}
                     onChange={(e) => setWalkInAmount(Number(e.target.value) || 0)}
                     className="w-full border border-zinc-400 p-3 rounded-xl font-mono font-bold"
                   />
                 </div>
                 <div>
-                  <label className="font-extrabold block mb-1">Cash Received (pending staff verification) (₱)</label>
+                  <label className="font-extrabold block mb-1">
+                    Cash Received ({currentUser.staffRole === 'lead_admin' || currentUser.staffRole === 'front_desk_cashier'
+                      ? 'confirmed when saved'
+                      : 'pending cashier verification'}) (₱)
+                  </label>
                   <input
                     type="number"
                     min={0}
+                    max={walkInAmount}
                     value={walkInPaid}
                     onChange={(e) => setWalkInPaid(Number(e.target.value) || 0)}
                     className="w-full border border-zinc-400 p-3 rounded-xl font-mono font-bold"
@@ -723,9 +746,10 @@ export function AdminPortal({
               </div>
               <button
                 type="submit"
-                className="w-full py-3 bg-[#D4A017] hover:bg-[#B8860B] text-black font-extrabold uppercase rounded-xl border border-black cursor-pointer text-sm sm:text-base"
+                disabled={isCreatingWalkIn}
+                className="w-full py-3 bg-[#D4A017] hover:bg-[#B8860B] text-black font-extrabold uppercase rounded-xl border border-black cursor-pointer text-sm sm:text-base disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Create Service Request &amp; Log Entry
+                {isCreatingWalkIn ? 'Saving Request...' : 'Create Service Request & Log Entry'}
               </button>
             </form>
           </div>

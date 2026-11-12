@@ -132,11 +132,18 @@ payment records; MongoDB for message threads, audit events, and rate limits; Goo
 OAuth for customer sign-in; and a private Backblaze B2 bucket for uploaded artwork.
 Customers pay online through PayMongo Hosted Checkout using GCash. A signed PayMongo
 webhook confirms successful payments; browser redirects alone never mark an order as
-paid. Walk-in cash and manually recorded GCash references remain pending until an
-authorized staff member reviews them. A verified partial payment is recorded against
-the balance but does not permit staff to confirm GCash orders; verified payments
-must cover the full order total first. Payment and order changes are then refreshed
-for the customer and relevant staff through realtime updates.
+paid. Cash on Pickup receipts entered by a lead administrator or front-desk cashier
+are confirmed in one step; other manually recorded payments and customer-submitted
+GCash references remain pending until an authorized staff member reviews them. A
+verified partial payment is recorded against the balance but does not permit staff
+to confirm GCash orders; verified payments must cover the full order total first.
+Payment and order changes are then refreshed for the customer and relevant staff
+through realtime updates.
+
+Customers can update their username and password from Profile. Changing an existing
+password requires the current password; Google-only accounts can set a password.
+Customer chat history remains available by order after completion. Artwork uploads
+accept PDF, DOCX, PNG, JPG, AI, and PSD files.
 
 GCash checkout is disabled by default. The lead administrator can enable or disable
 it from the admin dashboard after the owner's PayMongo and GCash account setup is

@@ -164,11 +164,15 @@ export async function POST(request: NextRequest) {
           ? 'balance_settlement'
           : 'full_payment';
     const transactionNumber = `TXN-${Date.now().toString(36).toUpperCase()}-${randomBytes(3).toString('hex').toUpperCase()}`;
+    const confirmedCashPayment =
+      ['lead_admin', 'front_desk_cashier'].includes(user.role) &&
+      payment.method === 'Cash on Pickup';
+    const status = confirmedCashPayment ? 'verified' : 'pending';
     await connection.execute(
       `INSERT INTO tbl_payments
         (transaction_number, print_order_id, payment_type, method, amount,
-         external_reference, status, verified_by)
-       VALUES (?, ?, ?, ?, ?, ?, 'pending', NULL)`,
+         external_reference, status, verified_by, paid_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = 'verified' THEN CURRENT_TIMESTAMP(3) ELSE NULL END)`,
       [
         transactionNumber,
         order.ID,
@@ -176,21 +180,30 @@ export async function POST(request: NextRequest) {
         payment.method,
         payment.amount,
         payment.gcashRefNo || null,
+        status,
+        confirmedCashPayment ? user.id : null,
+        status,
       ],
     );
     await connection.commit();
     await recordAuditEvent(request, user, {
       category: 'GCash Payment',
-      action: 'Submitted payment for review',
+      action: confirmedCashPayment ? 'Confirmed Cash on Pickup payment' : 'Submitted payment for review',
       details: `${payment.method}; ₱${payment.amount.toFixed(2)}.`,
       targetId: order.order_number,
+      ...(confirmedCashPayment ? { status: 'Verified' as const } : {}),
     });
     publishRealtimeEvent({
       topic: 'payments',
       orderId: order.order_number,
       targetUserIds: order.user_id ? [order.user_id] : [],
       targetRoles: ['lead_admin', 'front_desk_cashier'],
-      notification: { category: 'Payment', text: `A payment was submitted for request ${order.order_number}.` },
+      notification: {
+        category: 'Payment',
+        text: confirmedCashPayment
+          ? `A Cash on Pickup payment for request ${order.order_number} was confirmed.`
+          : `A payment was submitted for request ${order.order_number}.`,
+      },
     });
 
     return NextResponse.json(
@@ -205,7 +218,7 @@ export async function POST(request: NextRequest) {
           gcashRefNo: payment.gcashRefNo ?? '',
           date: new Date().toISOString().slice(0, 10),
           time: 'Just now',
-          status: 'Pending Review',
+          status: confirmedCashPayment ? 'Verified' : 'Pending Review',
         },
       },
       { status: 201 },

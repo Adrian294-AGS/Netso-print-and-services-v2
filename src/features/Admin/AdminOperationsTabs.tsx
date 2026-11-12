@@ -216,7 +216,7 @@ export function AdminPaymentsTab({
             Payment and order progress are separate
           </strong>
           <span className="font-medium text-zinc-700">
-            Only verified transactions count toward the paid total. PayMongo confirms automatically; staff review each manually recorded payment below. GCash orders require full payment before confirmation; Cash on Pickup orders may be confirmed with the balance due at pickup.
+            Only verified transactions count toward the paid total. Staff confirm collected Cash on Pickup payments in one step; customer-submitted GCash references still require review, and PayMongo confirms automatically. GCash orders require full payment before production confirmation.
           </span>
         </div>
 
@@ -348,7 +348,7 @@ export function AdminPaymentsTab({
                           onClick={() => onRecordPayment(req.id, availableToRecord(req))}
                           className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[11px] rounded-lg cursor-pointer transition-colors"
                         >
-                          Submit ₱{availableToRecord(req)}
+                          Confirm cash ₱{availableToRecord(req)}
                         </button>
                       )}
 
@@ -425,7 +425,7 @@ export function AdminPaymentsTab({
                     onClick={() => onRecordPayment(req.id, availableToRecord(req))}
                     className="flex-1 py-1.5 bg-blue-600 text-white font-extrabold text-xs rounded-lg"
                   >
-                    Submit ₱{availableToRecord(req)}
+                    Confirm cash ₱{availableToRecord(req)}
                   </button>
                 )}
 

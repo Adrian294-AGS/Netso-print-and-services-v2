@@ -170,7 +170,7 @@ const SERVICES_LIST: CustomerServiceItem[] = [
   },
 ];
 
-const ACCEPTED_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'ai', 'psd'];
+const ACCEPTED_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'ai', 'psd', 'docx'];
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg'];
 const MAX_FILE_SIZE_MB = 100;
 
@@ -286,7 +286,7 @@ function FileUploader({ files, onChange, theme = 'light' }: FileUploaderProps) {
           Choose from device
         </span>
         <p className={`mt-1.5 text-xs font-medium ${isDark ? 'text-zinc-300' : 'text-zinc-500'}`}>
-          PDF, PNG, JPG, AI, PSD · Up to {MAX_FILE_SIZE_MB} MB · Multiple files
+          PDF, DOCX, PNG, JPG, AI, PSD · Up to {MAX_FILE_SIZE_MB} MB · Multiple files
         </p>
       </div>
 
@@ -345,6 +345,7 @@ function FileUploader({ files, onChange, theme = 'light' }: FileUploaderProps) {
 
 export interface CustomerPortalProps {
   currentUser: { id: string; name: string; username: string; email: string };
+  onProfileUpdated?: (profile: { name: string; username: string | null; email: string | null }) => void;
   serviceRevision?: number;
   messageRevision?: number;
   initialTab?: 'dashboard' | 'services' | 'requests' | 'payments' | 'messages' | 'profile';
@@ -363,6 +364,7 @@ export function CustomerPortal({
   serviceRevision = 0,
   messageRevision = 0,
   initialTab = 'dashboard',
+  onProfileUpdated,
   fontSizeLevel = 'large',
   highContrastMode = false,
   onLogout,
@@ -427,7 +429,15 @@ export function CustomerPortal({
     orderId: string;
     messages: Array<{ sender: string; text: string; time: string; isStaff: boolean }>;
   }>({ orderId: '', messages: [] });
+  const [selectedMessageOrderId, setSelectedMessageOrderId] = useState('');
   const [newMessageInput, setNewMessageInput] = useState('');
+  const [accountUsername, setAccountUsername] = useState(currentUser.username);
+  const [currentPasswordInput, setCurrentPasswordInput] = useState('');
+  const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [confirmPasswordInput, setConfirmPasswordInput] = useState('');
+  const [isSavingAccount, setIsSavingAccount] = useState(false);
+  const [accountError, setAccountError] = useState('');
+  const [accountSuccess, setAccountSuccess] = useState('');
 
   const customerRequests = useMemo(
     () =>
@@ -445,7 +455,9 @@ export function CustomerPortal({
         : customerRequests.filter((request) => request.status === requestStatusFilter),
     [customerRequests, requestStatusFilter],
   );
-  const messageOrderId = customerRequests[0]?.id || '';
+  const messageOrderId = customerRequests.some((request) => request.id === selectedMessageOrderId)
+    ? selectedMessageOrderId
+    : customerRequests[0]?.id || '';
   const messages = messageState.orderId === messageOrderId ? messageState.messages : [];
 
   React.useEffect(() => {
@@ -506,7 +518,7 @@ export function CustomerPortal({
   }, []);
 
   React.useEffect(() => {
-    const orderId = customerRequests[0]?.id;
+    const orderId = messageOrderId;
     let active = true;
     const endpoint = orderId
       ? `/api/messages?orderId=${encodeURIComponent(orderId)}`
@@ -531,7 +543,7 @@ export function CustomerPortal({
     return () => {
       active = false;
     };
-  }, [customerRequests, messageRevision]);
+  }, [messageOrderId, messageRevision]);
 
   const totalPaid = useMemo(
     () => customerRequests.reduce((sum, r) => sum + r.paidAmount, 0),
@@ -645,6 +657,7 @@ export function CustomerPortal({
       const uploaded: UploadedFile[] = [];
       const typeByExtension: Record<string, string> = {
         pdf: 'application/pdf',
+        docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         png: 'image/png',
         jpg: 'image/jpeg',
         jpeg: 'image/jpeg',
@@ -801,7 +814,7 @@ export function CustomerPortal({
   };
 
   const handleSendMessage = async () => {
-    const orderId = customerRequests[0]?.id;
+    const orderId = messageOrderId;
     if (!newMessageInput.trim()) return;
     try {
       const response = await fetch('/api/messages', {
@@ -824,6 +837,55 @@ export function CustomerPortal({
     } catch (error) {
       console.error('Unable to send message:', error);
       window.alert(error instanceof Error ? error.message : 'Unable to send message.');
+    }
+  };
+
+  const handleUpdateAccount = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setAccountError('');
+    setAccountSuccess('');
+    if (newPasswordInput !== confirmPasswordInput) {
+      setAccountError('The new passwords do not match.');
+      return;
+    }
+    if (currentPasswordInput && !newPasswordInput) {
+      setAccountError('Enter a new password to use your current password.');
+      return;
+    }
+
+    setIsSavingAccount(true);
+    try {
+      const response = await fetch('/api/auth/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          username: accountUsername.trim(),
+          ...(newPasswordInput
+            ? { currentPassword: currentPasswordInput, newPassword: newPasswordInput }
+            : {}),
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.user) {
+        throw new Error(result.error || 'Unable to update account settings.');
+      }
+
+      onProfileUpdated?.({
+        name: result.user.name,
+        username: result.user.username,
+        email: result.user.email,
+      });
+      setAccountUsername(result.user.username ?? accountUsername.trim());
+      setCurrentPasswordInput('');
+      setNewPasswordInput('');
+      setConfirmPasswordInput('');
+      setAccountSuccess('Your account settings have been updated.');
+    } catch (error) {
+      console.error('Unable to update customer account settings:', error);
+      setAccountError(error instanceof Error ? error.message : 'Unable to update account settings.');
+    } finally {
+      setIsSavingAccount(false);
     }
   };
 
@@ -1654,6 +1716,32 @@ export function CustomerPortal({
 
           {activeTab === 'messages' && (
             <div className="border rounded-2xl p-5 bg-white border-zinc-300 h-[480px] flex flex-col justify-between shadow-xs">
+              <div className="mb-3 border-b border-zinc-200 pb-3">
+                <h2 className="font-extrabold text-lg text-zinc-950">Staff Live Chat</h2>
+                {customerRequests.length > 0 ? (
+                  <label className="mt-2 flex flex-col gap-1 text-xs font-bold text-zinc-700">
+                    Order conversation
+                    <select
+                      value={messageOrderId}
+                      onChange={(event) => setSelectedMessageOrderId(event.target.value)}
+                      className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-950"
+                    >
+                      {customerRequests.map((request) => (
+                        <option key={request.id} value={request.id}>
+                          {request.id} · {request.service} · {request.status}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="font-medium text-zinc-500">
+                      Conversations remain available for completed orders.
+                    </span>
+                  </label>
+                ) : (
+                  <p className="mt-1 text-xs text-zinc-500">
+                    Start a general conversation with NETSO staff.
+                  </p>
+                )}
+              </div>
               <div className="space-y-3.5 overflow-y-auto pr-1">
                 {messages.length === 0 && (
                   <p className="rounded-xl border border-dashed border-zinc-300 p-4 text-center text-sm text-zinc-500">
@@ -1721,6 +1809,81 @@ export function CustomerPortal({
                   Log Out
                 </button>
               </div>
+              <form onSubmit={handleUpdateAccount} className="space-y-3 border-t border-zinc-200 pt-4">
+                <h3 className="font-extrabold text-lg">Account Settings</h3>
+                <div>
+                  <label htmlFor="customer-username" className="mb-1 block text-sm font-bold">
+                    Username
+                  </label>
+                  <input
+                    id="customer-username"
+                    autoComplete="username"
+                    required
+                    minLength={3}
+                    maxLength={50}
+                    pattern="[A-Za-z0-9._-]+"
+                    value={accountUsername}
+                    onChange={(event) => setAccountUsername(event.target.value)}
+                    className="w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm"
+                  />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label htmlFor="customer-current-password" className="mb-1 block text-sm font-bold">
+                      Current password
+                    </label>
+                    <input
+                      id="customer-current-password"
+                      type="password"
+                      autoComplete="current-password"
+                      value={currentPasswordInput}
+                      onChange={(event) => setCurrentPasswordInput(event.target.value)}
+                      className="w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="customer-new-password" className="mb-1 block text-sm font-bold">
+                      New password
+                    </label>
+                    <input
+                      id="customer-new-password"
+                      type="password"
+                      autoComplete="new-password"
+                      minLength={12}
+                      maxLength={128}
+                      value={newPasswordInput}
+                      onChange={(event) => setNewPasswordInput(event.target.value)}
+                      className="w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label htmlFor="customer-confirm-password" className="mb-1 block text-sm font-bold">
+                    Confirm new password
+                  </label>
+                  <input
+                    id="customer-confirm-password"
+                    type="password"
+                    autoComplete="new-password"
+                    maxLength={128}
+                    value={confirmPasswordInput}
+                    onChange={(event) => setConfirmPasswordInput(event.target.value)}
+                    className="w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm"
+                  />
+                </div>
+                <p className="text-xs text-zinc-500">
+                  Enter your current password when changing an existing password. Accounts created with Google can set a password without one.
+                </p>
+                {accountError && <p role="alert" className="text-sm font-semibold text-red-700">{accountError}</p>}
+                {accountSuccess && <p role="status" className="text-sm font-semibold text-emerald-700">{accountSuccess}</p>}
+                <button
+                  type="submit"
+                  disabled={isSavingAccount}
+                  className="rounded-xl bg-[#D4A017] px-5 py-2.5 font-extrabold text-black disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSavingAccount ? 'Saving...' : 'Save Account Settings'}
+                </button>
+              </form>
             </div>
           )}
         </main>
