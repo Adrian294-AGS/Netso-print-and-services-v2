@@ -17,6 +17,7 @@ const contentTypes: Record<string, string> = {
   jpeg: 'image/jpeg',
   ai: 'application/postscript',
   psd: 'image/vnd.adobe.photoshop',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 };
 
 const schema = z.object({
@@ -36,7 +37,7 @@ export async function POST(request: NextRequest) {
     const { orderId, fileName, contentType, size } = parsed.data;
     const extension = fileName.split('.').pop()?.toLowerCase() ?? '';
     if (!contentTypes[extension] || contentTypes[extension] !== contentType.toLowerCase()) {
-      throw new ApiError(400, 'Only PDF, PNG, JPG, AI, and PSD files are accepted.');
+      throw new ApiError(400, 'Only PDF, PNG, JPG, AI, PSD, and DOCX files are accepted.');
     }
 
     const orders = await queryRows<{ ID: number; order_number: string; user_id: string | null } & import('mysql2/promise').RowDataPacket>(

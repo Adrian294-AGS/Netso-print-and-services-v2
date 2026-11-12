@@ -49,6 +49,7 @@ export async function GET(
       png: 'image/png',
       jpg: 'image/jpeg',
       jpeg: 'image/jpeg',
+      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     };
     const mimeType =
       file.mime_type?.toLowerCase() ??

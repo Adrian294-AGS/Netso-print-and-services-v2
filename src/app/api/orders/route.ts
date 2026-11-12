@@ -358,15 +358,22 @@ export async function POST(request: NextRequest) {
     );
     const insertId = (result as { insertId: number }).insertId;
     if (walkInPaid > 0) {
+      const verifiedByCashier =
+        ['lead_admin', 'front_desk_cashier'].includes(user.role);
+      const paymentStatus = verifiedByCashier ? 'verified' : 'pending';
       await connection.execute(
         `INSERT INTO tbl_payments
-          (transaction_number, print_order_id, payment_type, method, amount, status)
-         VALUES (?, ?, ?, 'Cash on Pickup', ?, 'pending')`,
+          (transaction_number, print_order_id, payment_type, method, amount,
+           status, verified_by, paid_at)
+         VALUES (?, ?, ?, 'Cash on Pickup', ?, ?, ?, CASE WHEN ? = 'verified' THEN CURRENT_TIMESTAMP(3) ELSE NULL END)`,
         [
           `TXN-${Date.now().toString(36).toUpperCase()}-${randomBytes(3).toString('hex').toUpperCase()}`,
           insertId,
           walkInPaid >= total ? 'full_payment' : 'deposit',
           walkInPaid,
+          paymentStatus,
+          verifiedByCashier ? user.id : null,
+          paymentStatus,
         ],
       );
     }
