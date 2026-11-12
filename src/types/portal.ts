@@ -111,6 +111,7 @@ export interface MessageThread {
   id: string;
   requestId: string;
   conversationType?: 'order' | 'general';
+  customerId?: string;
   customerName: string;
   customerUsername: string;
   serviceName: string;

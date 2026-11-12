@@ -80,7 +80,11 @@ interface AdminPortalProps {
   onReviewPayment: (paymentId: string, status: 'verified' | 'flagged') => void;
   onRecordPayment: (orderId: string, amount: number) => void;
   onSendAdminReply: (threadId: string, text: string) => void;
-  onStartCustomerConversation: (customerId: string, text: string) => Promise<MessageThread>;
+  onStartCustomerConversation: (
+    customerId: string,
+    text: string,
+    orderId?: string,
+  ) => Promise<MessageThread>;
   financialReportRevision: number;
   onCreateWalkInOrder: (
     customerName: string,
@@ -552,6 +556,7 @@ export function AdminPortal({
             <Notifications
               threads={threads}
               customers={customers}
+              requests={requests}
               selectedThreadId={activeThreadId}
               onSelectThread={setSelectedThreadId}
               onSendAdminReply={onSendAdminReply}
