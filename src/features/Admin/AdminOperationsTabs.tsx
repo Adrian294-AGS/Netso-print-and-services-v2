@@ -1,4 +1,6 @@
 
+'use client';
+
 import React, { useState, useMemo } from 'react';
 import {
   Search,
@@ -23,6 +25,7 @@ import {
   MessageThread,
   FontSizeLevel,
 } from '../../types/portal';
+import { useFeedback } from '../../components/feedback/FeedbackProvider';
 
 interface AdminPaymentsTabProps {
   requests: RequestOrder[];
@@ -706,6 +709,7 @@ export function AdminCustomersAndMessages({
   highContrastMode,
   fontSizeLevel,
 }: AdminCustomersAndMessagesProps) {
+  const { notify } = useFeedback();
   const [custSearch, setCustSearch] = useState('');
   const [replyInput, setReplyInput] = useState('');
   const [selectedMessageCustomerId, setSelectedMessageCustomerId] = useState('');
@@ -998,7 +1002,7 @@ export function AdminCustomersAndMessages({
         }
         setReplyInput('');
       } catch (error) {
-        window.alert(error instanceof Error ? error.message : 'Unable to send message.');
+        notify(error instanceof Error ? error.message : 'Unable to send message.', 'error');
       } finally {
         setIsSendingMessage(false);
       }

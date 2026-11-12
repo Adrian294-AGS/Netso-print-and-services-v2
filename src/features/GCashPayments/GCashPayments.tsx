@@ -11,6 +11,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { RequestOrder, UploadedFile, FontSizeLevel } from '../../types';
+import { useFeedback } from '../../components/feedback/FeedbackProvider';
 
 const ACCEPTED_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'ai', 'psd'];
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg'];
@@ -38,6 +39,7 @@ export function GCashPayments({
   onClose,
   onUpdateOrderFiles,
 }: GCashPaymentsProps) {
+  const { confirm, notify } = useFeedback();
   const [step, setStep] = useState<'upload' | 'select' | 'redirecting'>(
     order && order.files.length === 0 ? 'upload' : 'select',
   );
@@ -92,11 +94,13 @@ export function GCashPayments({
         result.reused &&
         result.payment &&
         result.payment.paymentType !== selectedPaymentType &&
-        !window.confirm(
-          `An existing ${result.payment.paymentType} checkout for ₱${Number(
+        !(await confirm({
+          title: 'Continue existing GCash checkout?',
+          message: `An existing ${result.payment.paymentType} checkout for ₱${Number(
             result.payment.amount,
           ).toLocaleString()} is still open. Continue with that checkout?`,
-        )
+          confirmLabel: 'Continue checkout',
+        }))
       ) {
         setStep('select');
         return;
@@ -105,7 +109,7 @@ export function GCashPayments({
     } catch (error) {
       console.error('Unable to start PayMongo GCash checkout:', error);
       setStep('select');
-      window.alert(error instanceof Error ? error.message : 'Unable to start GCash checkout.');
+      notify(error instanceof Error ? error.message : 'Unable to start GCash checkout.', 'error');
     }
   };
 

@@ -43,6 +43,7 @@ import { StaffManagement } from './StaffManagement/StaffManagement';
 import { ServiceManagement } from './ServiceManagement/ServiceManagement';
 import { Reports } from './Reports/Reports';
 import { Notifications } from './Notifications/Notifications';
+import { useFeedback } from '../../components/feedback/FeedbackProvider';
 import { AdminProfile } from './AdminProfile/AdminProfile';
 
 export type AdminTabId =
@@ -129,6 +130,7 @@ export function AdminPortal({
   onLogout,
   initialTab = 'dashboard',
 }: AdminPortalProps) {
+  const { notify } = useFeedback();
   const isLeadAdmin = currentUser.staffRole === 'lead_admin';
   const canReviewPayments =
     isLeadAdmin || currentUser.staffRole === 'front_desk_cashier';
@@ -302,7 +304,7 @@ export function AdminPortal({
       setIsWalkInModalOpen(false);
     } catch (error) {
       console.error('Unable to create walk-in request:', error);
-      window.alert(error instanceof Error ? error.message : 'Unable to save the walk-in request.');
+      notify(error instanceof Error ? error.message : 'Unable to save the walk-in request.', 'error');
     } finally {
       setIsCreatingWalkIn(false);
     }

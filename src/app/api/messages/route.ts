@@ -55,11 +55,33 @@ export async function GET(request: NextRequest) {
     }
 
     if (!isStaffRole(user.role)) {
-      const thread = await MessageThreadModel.findOne({
-        orderNumber: generalThreadKey(user.id),
-        customerId: user.id,
-      }).lean();
-      return NextResponse.json({ ok: true, thread: thread ? serializeThread(thread) : null });
+      const threads = await MessageThreadModel.find({ customerId: user.id })
+        .sort({ updatedAt: -1 })
+        .limit(200)
+        .lean();
+      const orderNumbers = threads
+        .map((thread) => thread.orderNumber)
+        .filter((number) => !number.startsWith(GENERAL_THREAD_PREFIX));
+      const orders = orderNumbers.length
+        ? await queryRows<
+            { order_number: string; customer_name: string; username: string | null; service_name_snapshot: string } & import('mysql2/promise').RowDataPacket
+          >(
+            mysqlPool,
+            `SELECT o.order_number, o.customer_name, u.username, o.service_name_snapshot
+             FROM tbl_print_order o LEFT JOIN tbl_user u ON u.UID = o.user_id
+             WHERE o.user_id = ? AND o.order_number IN (${orderNumbers.map(() => '?').join(',')})`,
+            [user.id, ...orderNumbers],
+          )
+        : [];
+      const orderByNumber = new Map(orders.map((order) => [order.order_number, order]));
+      const serializedThreads = threads.map((thread) =>
+        serializeThread(thread, orderByNumber.get(thread.orderNumber)),
+      );
+      return NextResponse.json({
+        ok: true,
+        thread: serializedThreads.find((thread) => thread.conversationType === 'general') ?? null,
+        threads: serializedThreads,
+      });
     }
     const threads = await MessageThreadModel.find().sort({ updatedAt: -1 }).limit(200).lean();
     const numbers = threads.map((thread) => thread.orderNumber);
@@ -106,7 +128,7 @@ export async function POST(request: NextRequest) {
       thread = await MessageThreadModel.findOneAndUpdate(
         { _id: existingThread._id },
         {
-          $set: { status: 'Replied' },
+          $set: { status: 'Replied', customerUnread: true },
           $push: { messages: { senderId: user.id, senderName: user.name, senderRole: user.role, text } },
         },
         { returnDocument: 'after', runValidators: true },
@@ -134,7 +156,7 @@ export async function POST(request: NextRequest) {
             customerName: customer.name || 'Customer',
             customerUsername: customer.username ?? '',
           },
-          $set: { status: 'Replied' },
+          $set: { status: 'Replied', customerUnread: true },
           $push: { messages: { senderId: user.id, senderName: user.name, senderRole: user.role, text } },
         },
         { upsert: true, returnDocument: 'after', runValidators: true, setDefaultsOnInsert: true },
@@ -150,7 +172,7 @@ export async function POST(request: NextRequest) {
             customerName: order.customer_name,
             customerUsername: order.username ?? '',
           },
-          $set: { status: staff ? 'Replied' : 'UNREAD' },
+          $set: { status: staff ? 'Replied' : 'UNREAD', customerUnread: staff },
           $push: { messages: { senderId: user.id, senderName: user.name, senderRole: user.role, text } },
         },
         { upsert: true, returnDocument: 'after', runValidators: true, setDefaultsOnInsert: true },
@@ -167,7 +189,7 @@ export async function POST(request: NextRequest) {
             customerName: user.name,
             customerUsername: user.username ?? '',
           },
-          $set: { status: 'UNREAD' },
+          $set: { status: 'UNREAD', customerUnread: false },
           $push: { messages: { senderId: user.id, senderName: user.name, senderRole: user.role, text } },
         },
         { upsert: true, returnDocument: 'after', runValidators: true, setDefaultsOnInsert: true },
@@ -190,9 +212,7 @@ export async function POST(request: NextRequest) {
       notification: {
         category: 'Message',
         text: staff
-          ? isGeneral
-            ? `NETSO staff sent a message to ${thread.customerName ?? 'a customer'}.`
-            : `A staff member replied to request ${thread.orderNumber}.`
+          ? 'NETSO staff sent you a message.'
           : isGeneral
             ? `A customer sent a general message to staff.`
             : `A customer sent a message about request ${thread.orderNumber}.`,
@@ -207,31 +227,38 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     assertSameOrigin(request);
-    await requireSession(request, [
-      'lead_admin',
-      'print_operator',
-      'pre_press_artist',
-      'front_desk_cashier',
-    ]);
+    const user = await requireSession(request);
     const parsed = z.object({ threadId: z.string().regex(/^[a-f\d]{24}$/i) }).safeParse(
       await readJson(request),
     );
     if (!parsed.success) throw new ApiError(400, 'Conversation details are invalid.');
 
+    const staff = isStaffRole(user.role);
+    if (!staff && user.role !== 'customer') {
+      throw new ApiError(403, 'You cannot update this conversation.');
+    }
     await connectMongoDB();
     const updatedThread = await MessageThreadModel.findOneAndUpdate(
-      { _id: parsed.data.threadId, status: 'UNREAD' },
-      { $set: { status: 'Read' } },
+      staff
+        ? { _id: parsed.data.threadId, status: 'UNREAD' }
+        : { _id: parsed.data.threadId, customerId: user.id, customerUnread: true },
+      { $set: staff ? { status: 'Read' } : { customerUnread: false } },
       { returnDocument: 'after' },
     )
-      .select('status')
+      .select('status customerUnread')
       .lean();
     const thread =
       updatedThread ??
-      (await MessageThreadModel.findById(parsed.data.threadId).select('status').lean());
+      (await MessageThreadModel.findOne(
+        staff
+          ? { _id: parsed.data.threadId }
+          : { _id: parsed.data.threadId, customerId: user.id },
+      )
+        .select('status customerUnread')
+        .lean());
     if (!thread) throw new ApiError(404, 'Conversation not found.');
 
-    if (updatedThread) {
+    if (staff && updatedThread) {
       publishRealtimeEvent({
         topic: 'messages',
         targetRoles: ['lead_admin', 'print_operator', 'pre_press_artist', 'front_desk_cashier'],
@@ -241,6 +268,7 @@ export async function PATCH(request: NextRequest) {
       ok: true,
       threadId: parsed.data.threadId,
       status: thread.status,
+      customerUnread: Boolean(thread.customerUnread),
     });
   } catch (error) {
     return apiErrorResponse(error);
@@ -255,6 +283,7 @@ function serializeThread(
   customerName?: string;
   customerUsername?: string;
   status: string;
+  customerUnread?: boolean;
   updatedAt: Date;
   messages: Array<{ _id: unknown; senderId: string; senderName: string; senderRole: string; text: string; createdAt: Date }>;
   },
@@ -270,6 +299,7 @@ function serializeThread(
     customerUsername: order?.username ?? thread.customerUsername ?? '',
     serviceName: isGeneral ? 'General Inquiry' : order?.service_name_snapshot ?? '',
     status: thread.status,
+    customerUnread: Boolean(thread.customerUnread),
     lastUpdated: new Date(thread.updatedAt).toISOString(),
     messages: thread.messages.map((message) => ({
       id: String(message._id),

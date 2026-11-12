@@ -112,6 +112,7 @@ export interface MessageThread {
   requestId: string;
   conversationType?: 'order' | 'general';
   customerId?: string;
+  customerUnread?: boolean;
   customerName: string;
   customerUsername: string;
   serviceName: string;

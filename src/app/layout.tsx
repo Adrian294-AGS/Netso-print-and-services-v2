@@ -1,5 +1,6 @@
 import React from 'react';
 import './globals.css';
+import { FeedbackProvider } from '@/components/feedback/FeedbackProvider';
 
 export const metadata = {
   title: 'NETSO Prints & Ads ',
@@ -33,7 +34,7 @@ export default function RootLayout({
         />
       </head>
       <body className="bg-[#0D0D0E] text-[#F4F4F5] antialiased selection:bg-[#D4A017] selection:text-black">
-        {children}
+        <FeedbackProvider>{children}</FeedbackProvider>
       </body>
     </html>
   );
