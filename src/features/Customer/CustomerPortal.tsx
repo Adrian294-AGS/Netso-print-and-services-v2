@@ -39,7 +39,7 @@ import {
 } from '../../types/portal';
 import { Header } from '../../components/Header';
 import { Sidebar } from '../../components/Sidebar';
-import { computeQuote, describeOption, startingFrom, type ServiceOption } from '@/lib/pricing';
+import { computeQuote, describeOption, sortedTiers, type ServiceOption } from '@/lib/pricing';
 import { iconFor } from '@/lib/service-icons';
 
 export type { FontSizeLevel } from '../../types/portal';
@@ -1423,7 +1423,7 @@ export function CustomerPortal({
                           </div>
                           <span className="bg-zinc-950 text-[#D4A017] font-mono font-black px-3 py-1.5 rounded-lg text-sm">
                             {srv.options && srv.options.length > 0
-                              ? `From ₱${startingFrom(srv.options).price.toLocaleString()} ${startingFrom(srv.options).unit}`
+                              ? `₱${sortedTiers((srv.options.find((o) => o.available) ?? srv.options[0]).tiers)[0].price.toLocaleString()} ${(srv.options.find((o) => o.available) ?? srv.options[0]).unit}`
                               : `₱${srv.basePrice} ${srv.unit}`}
                           </span>
                         </div>
