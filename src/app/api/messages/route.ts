@@ -204,6 +204,49 @@ export async function POST(request: NextRequest) {
   }
 }
 
+export async function PATCH(request: NextRequest) {
+  try {
+    assertSameOrigin(request);
+    await requireSession(request, [
+      'lead_admin',
+      'print_operator',
+      'pre_press_artist',
+      'front_desk_cashier',
+    ]);
+    const parsed = z.object({ threadId: z.string().regex(/^[a-f\d]{24}$/i) }).safeParse(
+      await readJson(request),
+    );
+    if (!parsed.success) throw new ApiError(400, 'Conversation details are invalid.');
+
+    await connectMongoDB();
+    const updatedThread = await MessageThreadModel.findOneAndUpdate(
+      { _id: parsed.data.threadId, status: 'UNREAD' },
+      { $set: { status: 'Read' } },
+      { returnDocument: 'after' },
+    )
+      .select('status')
+      .lean();
+    const thread =
+      updatedThread ??
+      (await MessageThreadModel.findById(parsed.data.threadId).select('status').lean());
+    if (!thread) throw new ApiError(404, 'Conversation not found.');
+
+    if (updatedThread) {
+      publishRealtimeEvent({
+        topic: 'messages',
+        targetRoles: ['lead_admin', 'print_operator', 'pre_press_artist', 'front_desk_cashier'],
+      });
+    }
+    return NextResponse.json({
+      ok: true,
+      threadId: parsed.data.threadId,
+      status: thread.status,
+    });
+  } catch (error) {
+    return apiErrorResponse(error);
+  }
+}
+
 function serializeThread(
   thread: {
   _id: unknown;

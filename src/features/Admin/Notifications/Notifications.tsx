@@ -14,6 +14,7 @@ interface NotificationsProps {
   selectedThreadId: string;
   onSelectThread: (id: string) => void;
   onSendAdminReply: (threadId: string, text: string) => void;
+  onMarkThreadRead: (threadId: string) => Promise<void>;
   onStartCustomerConversation: (customerId: string, text: string, orderId?: string) => Promise<MessageThread>;
   highContrastMode: boolean;
   fontSizeLevel: FontSizeLevel;
@@ -26,6 +27,7 @@ export function Notifications({
   selectedThreadId,
   onSelectThread,
   onSendAdminReply,
+  onMarkThreadRead,
   onStartCustomerConversation,
   highContrastMode,
   fontSizeLevel,
@@ -39,6 +41,7 @@ export function Notifications({
       selectedThreadId={selectedThreadId}
       onSelectThread={onSelectThread}
       onSendAdminReply={onSendAdminReply}
+      onMarkThreadRead={onMarkThreadRead}
       onStartCustomerConversation={onStartCustomerConversation}
       onSelectCustomer={() => {}}
       onOpenLogout={() => {}}

@@ -674,11 +674,21 @@ interface AdminCustomersAndMessagesProps {
   selectedThreadId: string;
   onSelectThread: (id: string) => void;
   onSendAdminReply: (threadId: string, text: string) => void;
+  onMarkThreadRead?: (threadId: string) => Promise<void>;
   onStartCustomerConversation?: (customerId: string, text: string, orderId?: string) => Promise<MessageThread>;
   onSelectCustomer: (customer: CustomerRecord) => void;
   onOpenLogout: () => void;
   highContrastMode: boolean;
   fontSizeLevel: FontSizeLevel;
+}
+
+function formatMessageTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const today = new Date();
+  return date.toDateString() === today.toDateString()
+    ? date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    : date.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
 export function AdminCustomersAndMessages({
@@ -689,6 +699,7 @@ export function AdminCustomersAndMessages({
   selectedThreadId,
   onSelectThread,
   onSendAdminReply,
+  onMarkThreadRead,
   onStartCustomerConversation,
   onSelectCustomer,
   onOpenLogout,
@@ -713,6 +724,23 @@ export function AdminCustomersAndMessages({
         c.email.toLowerCase().includes(q),
     );
   }, [customers, custSearch]);
+  const customerInbox = filteredCustomers
+    .map((customer) => {
+      const conversations = threads.filter((thread) => thread.customerId === customer.id);
+      const latestThread = conversations
+        .slice()
+        .sort((left, right) => Date.parse(right.lastUpdated) - Date.parse(left.lastUpdated))[0];
+      return {
+        customer,
+        latestThread,
+        unreadCount: conversations.filter((thread) => thread.status === 'UNREAD').length,
+      };
+    })
+    .sort((left, right) => {
+      const leftTime = Date.parse(left.latestThread?.lastUpdated ?? left.customer.lastActive);
+      const rightTime = Date.parse(right.latestThread?.lastUpdated ?? right.customer.lastActive);
+      return (Number.isNaN(rightTime) ? 0 : rightTime) - (Number.isNaN(leftTime) ? 0 : leftTime);
+    });
 
   const selectedThread = threads.find((thread) => thread.id === selectedThreadId);
   const activeCustomer =
@@ -743,6 +771,11 @@ export function AdminCustomersAndMessages({
   const activeThread = activeOrder
     ? threads.find((thread) => thread.requestId === activeOrder.id)
     : generalThread;
+  const selectThread = (thread: MessageThread | undefined) => {
+    if (!thread) return;
+    onSelectThread(thread.id);
+    if (thread.status === 'UNREAD') void onMarkThreadRead?.(thread.id);
+  };
 
   if (mode === 'customers') {
     return (
@@ -1017,23 +1050,37 @@ export function AdminCustomersAndMessages({
               </span>
             </label>
             <div className="max-h-[460px] space-y-2 overflow-y-auto">
-              {filteredCustomers.map((customer) => {
+              {customerInbox.map(({ customer, latestThread, unreadCount }) => {
                 const name =
                   [customer.firstName, customer.middleName, customer.lastName].filter(Boolean).join(' ') ||
                   customer.username ||
                   customer.email;
-                const unread = threads.filter(
-                  (thread) => thread.customerId === customer.id && thread.status === 'UNREAD',
-                ).length;
                 const isSelected = activeCustomer?.id === customer.id;
+                const latestMessage = latestThread?.messages[latestThread.messages.length - 1];
                 return (
                   <button
                     key={customer.id}
                     type="button"
                     onClick={() => {
                       setSelectedMessageCustomerId(customer.id);
-                      setSelectedMessageOrderId('');
+                      const unreadThread = threads
+                        .filter(
+                          (thread) =>
+                            thread.customerId === customer.id && thread.status === 'UNREAD',
+                        )
+                        .sort(
+                          (left, right) =>
+                            Date.parse(right.lastUpdated) - Date.parse(left.lastUpdated),
+                        )[0];
+                      const threadToOpen = unreadThread ?? latestThread;
+                      setSelectedMessageOrderId(
+                        threadToOpen?.conversationType === 'general' ||
+                          threadToOpen?.requestId === 'General Inquiry'
+                          ? 'general'
+                          : threadToOpen?.requestId ?? '',
+                      );
                       setReplyInput('');
+                      selectThread(threadToOpen);
                     }}
                     className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors ${
                       isSelected
@@ -1050,11 +1097,21 @@ export function AdminCustomersAndMessages({
                       <span className="block truncate text-sm font-extrabold">{name}</span>
                       <span className="block truncate text-xs text-zinc-500">@{customer.username}</span>
                     </span>
-                    {unread > 0 && (
+                    {unreadCount > 0 && (
                       <span className="rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-black text-white">
-                        {unread}
+                        {unreadCount} unread
                       </span>
                     )}
+                    <span className="block min-w-0 flex-1">
+                      <span className="block truncate text-xs text-zinc-500">
+                        {latestMessage?.text ?? 'No messages yet'}
+                      </span>
+                      {latestThread && (
+                        <span className="block text-[10px] text-zinc-400">
+                          {formatMessageTime(latestThread.lastUpdated)}
+                        </span>
+                      )}
+                    </span>
                   </button>
                 );
               })}
@@ -1070,36 +1127,45 @@ export function AdminCustomersAndMessages({
             <h2 className={`text-xs font-extrabold uppercase ${highContrastMode ? 'text-zinc-300' : 'text-zinc-600'}`}>
               {activeCustomer ? `${activeCustomerName}'s orders` : 'Orders'}
             </h2>
-            {customerOrders.map((order) => (
-              <button
-                key={order.id}
-                type="button"
-                onClick={() => {
-                  setSelectedMessageOrderId(order.id);
-                  setReplyInput('');
-                  const thread = threads.find((item) => item.requestId === order.id);
-                  if (thread) onSelectThread(thread.id);
-                }}
-                className={`w-full rounded-xl border p-3 text-left ${
-                  activeOrder?.id === order.id
-                    ? 'border-[#D4A017] bg-amber-50 text-zinc-950'
-                    : highContrastMode
-                      ? 'border-zinc-700 bg-zinc-900 text-white'
-                      : 'border-zinc-300 bg-white text-zinc-950'
-                }`}
-              >
-                <span className="block font-mono text-[11px] font-black text-amber-800">{order.id}</span>
-                <span className="mt-1 block text-sm font-extrabold">{order.service}</span>
-                <span className="mt-1 block text-xs text-zinc-500">{order.status}</span>
-              </button>
-            ))}
+            {customerOrders.map((order) => {
+              const thread = threads.find((item) => item.requestId === order.id);
+              return (
+                <button
+                  key={order.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedMessageOrderId(order.id);
+                    setReplyInput('');
+                    selectThread(thread);
+                  }}
+                  className={`w-full rounded-xl border p-3 text-left ${
+                    activeOrder?.id === order.id
+                      ? 'border-[#D4A017] bg-amber-50 text-zinc-950'
+                      : highContrastMode
+                        ? 'border-zinc-700 bg-zinc-900 text-white'
+                        : 'border-zinc-300 bg-white text-zinc-950'
+                  }`}
+                >
+                  <span className="block font-mono text-[11px] font-black text-amber-800">{order.id}</span>
+                  <span className="mt-1 block text-sm font-extrabold">{order.service}</span>
+                  <span className="mt-1 flex items-center justify-between gap-2 text-xs text-zinc-500">
+                    <span>{order.status}</span>
+                    {thread?.status === 'UNREAD' && (
+                      <span className="rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-black text-white">
+                        Unread
+                      </span>
+                    )}
+                  </span>
+                </button>
+              );
+            })}
             {generalThread && (
               <button
                 type="button"
                 onClick={() => {
                   setSelectedMessageOrderId('general');
                   setReplyInput('');
-                  onSelectThread(generalThread.id);
+                  selectThread(generalThread);
                 }}
                 className={`w-full rounded-xl border p-3 text-left ${
                   isGeneralConversationSelected
@@ -1109,7 +1175,14 @@ export function AdminCustomersAndMessages({
                       : 'border-zinc-300 bg-white text-zinc-950'
                 }`}
               >
-                <span className="block text-sm font-extrabold">General conversation</span>
+                <span className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-extrabold">General conversation</span>
+                  {generalThread.status === 'UNREAD' && (
+                    <span className="rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-black text-white">
+                      Unread
+                    </span>
+                  )}
+                </span>
                 <span className="mt-1 block text-xs text-zinc-500">Not linked to an order</span>
               </button>
             )}
