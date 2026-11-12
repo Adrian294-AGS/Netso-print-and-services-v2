@@ -2,6 +2,7 @@ import React from 'react';
 import {
   CustomerRecord,
   MessageThread,
+  RequestOrder,
   FontSizeLevel,
 } from '../../../types';
 import { AdminCustomersAndMessages } from '../AdminOperationsTabs';
@@ -9,10 +10,11 @@ import { AdminCustomersAndMessages } from '../AdminOperationsTabs';
 interface NotificationsProps {
   threads: MessageThread[];
   customers: CustomerRecord[];
+  requests: RequestOrder[];
   selectedThreadId: string;
   onSelectThread: (id: string) => void;
   onSendAdminReply: (threadId: string, text: string) => void;
-  onStartCustomerConversation: (customerId: string, text: string) => Promise<MessageThread>;
+  onStartCustomerConversation: (customerId: string, text: string, orderId?: string) => Promise<MessageThread>;
   highContrastMode: boolean;
   fontSizeLevel: FontSizeLevel;
 }
@@ -20,6 +22,7 @@ interface NotificationsProps {
 export function Notifications({
   threads,
   customers,
+  requests,
   selectedThreadId,
   onSelectThread,
   onSendAdminReply,
@@ -31,6 +34,7 @@ export function Notifications({
     <AdminCustomersAndMessages
       mode="messages"
       customers={customers}
+      requests={requests}
       threads={threads}
       selectedThreadId={selectedThreadId}
       onSelectThread={onSelectThread}

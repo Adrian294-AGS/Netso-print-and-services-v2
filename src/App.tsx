@@ -354,10 +354,14 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
     }
   };
 
-  const handleStartCustomerConversation = async (customerId: string, text: string) => {
+  const handleStartCustomerConversation = async (
+    customerId: string,
+    text: string,
+    orderId?: string,
+  ) => {
     const result = await apiRequest<{ thread: MessageThread }>('/api/messages', {
       method: 'POST',
-      body: JSON.stringify({ customerId, text }),
+      body: JSON.stringify(orderId ? { orderId, text } : { customerId, text }),
     });
     const refreshed = await apiRequest<{ threads: MessageThread[] }>('/api/messages');
     setThreads(refreshed.threads);

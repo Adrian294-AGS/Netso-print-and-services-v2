@@ -669,11 +669,12 @@ export function AdminPaymentsTab({
 interface AdminCustomersAndMessagesProps {
   mode: 'customers' | 'messages' | 'profile';
   customers: CustomerRecord[];
+  requests?: RequestOrder[];
   threads: MessageThread[];
   selectedThreadId: string;
   onSelectThread: (id: string) => void;
   onSendAdminReply: (threadId: string, text: string) => void;
-  onStartCustomerConversation?: (customerId: string, text: string) => Promise<MessageThread>;
+  onStartCustomerConversation?: (customerId: string, text: string, orderId?: string) => Promise<MessageThread>;
   onSelectCustomer: (customer: CustomerRecord) => void;
   onOpenLogout: () => void;
   highContrastMode: boolean;
@@ -683,6 +684,7 @@ interface AdminCustomersAndMessagesProps {
 export function AdminCustomersAndMessages({
   mode,
   customers,
+  requests = [],
   threads,
   selectedThreadId,
   onSelectThread,
@@ -695,8 +697,9 @@ export function AdminCustomersAndMessages({
 }: AdminCustomersAndMessagesProps) {
   const [custSearch, setCustSearch] = useState('');
   const [replyInput, setReplyInput] = useState('');
-  const [isComposingNewConversation, setIsComposingNewConversation] = useState(false);
-  const [newConversationCustomerId, setNewConversationCustomerId] = useState('');
+  const [selectedMessageCustomerId, setSelectedMessageCustomerId] = useState('');
+  const [selectedMessageOrderId, setSelectedMessageOrderId] = useState('');
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
 
   const filteredCustomers = useMemo(() => {
     const q = custSearch.toLowerCase();
@@ -711,12 +714,35 @@ export function AdminCustomersAndMessages({
     );
   }, [customers, custSearch]);
 
-  const activeThread = useMemo(
-    () => isComposingNewConversation
-      ? undefined
-      : threads.find((t) => t.id === selectedThreadId) || threads[0],
-    [threads, selectedThreadId, isComposingNewConversation],
-  );
+  const selectedThread = threads.find((thread) => thread.id === selectedThreadId);
+  const activeCustomer =
+    customers.find((customer) => customer.id === selectedMessageCustomerId) ??
+    customers.find((customer) => customer.id === selectedThread?.customerId) ??
+    customers[0];
+  const activeCustomerName = activeCustomer
+    ? [activeCustomer.firstName, activeCustomer.middleName, activeCustomer.lastName]
+        .filter(Boolean)
+        .join(' ') || activeCustomer.username || activeCustomer.email
+    : '';
+  const customerOrders = activeCustomer
+    ? requests.filter((request) => request.customerId === activeCustomer.id)
+    : [];
+  const isGeneralConversationSelected = selectedMessageOrderId === 'general';
+  const activeOrder = isGeneralConversationSelected
+    ? undefined
+    : customerOrders.find((order) => order.id === selectedMessageOrderId) ??
+      customerOrders.find((order) => order.id === selectedThread?.requestId) ??
+      customerOrders[0];
+  const generalThread = activeCustomer
+    ? threads.find(
+        (thread) =>
+          thread.customerId === activeCustomer.id &&
+          (thread.conversationType === 'general' || thread.requestId === 'General Inquiry'),
+      )
+    : undefined;
+  const activeThread = activeOrder
+    ? threads.find((thread) => thread.requestId === activeOrder.id)
+    : generalThread;
 
   if (mode === 'customers') {
     return (
@@ -922,25 +948,27 @@ export function AdminCustomersAndMessages({
   }
 
   if (mode === 'messages') {
-    const handleSend = () => {
-      if (!replyInput.trim()) return;
-      if (isComposingNewConversation) {
-        if (!newConversationCustomerId || !onStartCustomerConversation) return;
-        void onStartCustomerConversation(newConversationCustomerId, replyInput.trim())
-          .then((thread) => {
-            setIsComposingNewConversation(false);
-            setNewConversationCustomerId('');
-            onSelectThread(thread.id);
-          })
-          .catch((error: unknown) => {
-            window.alert(error instanceof Error ? error.message : 'Unable to start conversation.');
-          });
+    const handleSend = async () => {
+      const text = replyInput.trim();
+      if (!text || !activeCustomer || isSendingMessage) return;
+      setIsSendingMessage(true);
+      try {
+        if (activeThread) {
+          onSendAdminReply(activeThread.id, text);
+        } else if (onStartCustomerConversation) {
+          const thread = await onStartCustomerConversation(
+            activeCustomer.id,
+            text,
+            activeOrder?.id,
+          );
+          onSelectThread(thread.id);
+        }
         setReplyInput('');
-        return;
+      } catch (error) {
+        window.alert(error instanceof Error ? error.message : 'Unable to send message.');
+      } finally {
+        setIsSendingMessage(false);
       }
-      if (!activeThread) return;
-      onSendAdminReply(activeThread.id, replyInput.trim());
-      setReplyInput('');
     };
 
     return (
@@ -965,194 +993,214 @@ export function AdminCustomersAndMessages({
               highContrastMode ? 'text-zinc-300' : 'text-zinc-600'
             } ${fontSizeLevel === 'xlarge' ? 'text-base' : 'text-xs sm:text-sm'}`}
           >
-            Respond to customer quote inquiries, confirm GCash receipts, and send pre-press layout proofs.
+            Select a customer, choose an order, and start or continue a conversation.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            setIsComposingNewConversation(true);
-            setNewConversationCustomerId('');
-            setReplyInput('');
-          }}
-          className="rounded-lg border border-black bg-[#D4A017] px-3 py-2 text-xs font-extrabold text-black"
-        >
-          New conversation
-        </button>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5">
-          <div className="lg:col-span-5 space-y-2">
-            {threads.map((thr) => {
-              const isSelected = activeThread?.id === thr.id;
-              const lastMsg = thr.messages[thr.messages.length - 1];
-
-              return (
-                <div
-                  key={thr.id}
-                  onClick={() => {
-                    setIsComposingNewConversation(false);
-                    onSelectThread(thr.id);
-                  }}
-                  className={`p-3.5 rounded-xl border-l-4 border cursor-pointer transition-all ${
-                    isSelected
-                      ? 'border-l-[#D4A017] border-[#D4A017] bg-amber-50/90 text-zinc-950 shadow-sm'
-                      : highContrastMode
-                        ? 'border-l-zinc-600 border-zinc-700 bg-zinc-900 text-white hover:border-amber-400'
-                        : 'border-l-zinc-400 border-zinc-300 bg-white text-zinc-950 hover:border-[#D4A017]'
+          <div className="lg:col-span-4 space-y-2">
+            <label className="block text-xs font-extrabold">
+              Customers
+              <span className="relative mt-1 block">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
+                <input
+                  type="search"
+                  placeholder="Search customers..."
+                  value={custSearch}
+                  onChange={(event) => setCustSearch(event.target.value)}
+                  className={`w-full rounded-lg border py-2 pl-9 pr-3 text-sm ${
+                    highContrastMode
+                      ? 'border-zinc-700 bg-zinc-900 text-white'
+                      : 'border-zinc-300 bg-white text-zinc-950'
                   }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono font-black text-xs text-amber-800">
-                      {thr.requestId} · {thr.customerName}
+                />
+              </span>
+            </label>
+            <div className="max-h-[460px] space-y-2 overflow-y-auto">
+              {filteredCustomers.map((customer) => {
+                const name =
+                  [customer.firstName, customer.middleName, customer.lastName].filter(Boolean).join(' ') ||
+                  customer.username ||
+                  customer.email;
+                const unread = threads.filter(
+                  (thread) => thread.customerId === customer.id && thread.status === 'UNREAD',
+                ).length;
+                const isSelected = activeCustomer?.id === customer.id;
+                return (
+                  <button
+                    key={customer.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedMessageCustomerId(customer.id);
+                      setSelectedMessageOrderId('');
+                      setReplyInput('');
+                    }}
+                    className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors ${
+                      isSelected
+                        ? 'border-[#D4A017] bg-amber-50 text-zinc-950'
+                        : highContrastMode
+                          ? 'border-zinc-700 bg-zinc-900 text-white hover:border-amber-400'
+                          : 'border-zinc-300 bg-white text-zinc-950 hover:border-[#D4A017]'
+                    }`}
+                  >
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#D4A017] text-sm font-black text-black">
+                      {name.split(/\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase()}
                     </span>
-
-                    <span
-                      className={`px-2 py-0.5 rounded text-[10px] font-black uppercase border ${
-                        thr.status === 'UNREAD'
-                          ? 'bg-[#D4A017] text-black border-black'
-                          : 'bg-zinc-100 text-zinc-700 border-zinc-300'
-                      }`}
-                    >
-                      {thr.status}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-extrabold">{name}</span>
+                      <span className="block truncate text-xs text-zinc-500">@{customer.username}</span>
                     </span>
-                  </div>
-
-                  <p className="text-xs font-bold mt-1 truncate">
-                    "{lastMsg?.text}"
-                  </p>
-
-                  <span className={`text-[10px] font-semibold block mt-1 ${
-                    highContrastMode && !isSelected ? 'text-zinc-300' : 'text-zinc-600'
-                  }`}>
-                    {thr.serviceName} · Updated {thr.lastUpdated}
-                  </span>
-                </div>
-              );
-            })}
+                    {unread > 0 && (
+                      <span className="rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-black text-white">
+                        {unread}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+              {filteredCustomers.length === 0 && (
+                <p className="rounded-xl border border-dashed border-zinc-300 p-4 text-sm text-zinc-500">
+                  No customers found.
+                </p>
+              )}
+            </div>
           </div>
 
-          {(activeThread || isComposingNewConversation) && (
-            <div
-              className={`lg:col-span-7 border rounded-2xl p-4 flex flex-col justify-between h-[460px] shadow-xs ${
-                highContrastMode
-                  ? 'bg-zinc-900 border-zinc-700 text-white'
-                  : 'bg-white border-zinc-300 text-zinc-950'
-              }`}
-            >
-              <div className="border-b border-zinc-200 pb-2.5 flex items-center justify-between">
-                <div>
-                  <span className="font-mono font-black text-xs bg-amber-100 text-black px-2 py-0.5 rounded border border-[#D4A017]">
-                    {activeThread?.requestId ?? 'New general conversation'}
-                  </span>
+          <div className="lg:col-span-3 space-y-2">
+            <h2 className={`text-xs font-extrabold uppercase ${highContrastMode ? 'text-zinc-300' : 'text-zinc-600'}`}>
+              {activeCustomer ? `${activeCustomerName}'s orders` : 'Orders'}
+            </h2>
+            {customerOrders.map((order) => (
+              <button
+                key={order.id}
+                type="button"
+                onClick={() => {
+                  setSelectedMessageOrderId(order.id);
+                  setReplyInput('');
+                  const thread = threads.find((item) => item.requestId === order.id);
+                  if (thread) onSelectThread(thread.id);
+                }}
+                className={`w-full rounded-xl border p-3 text-left ${
+                  activeOrder?.id === order.id
+                    ? 'border-[#D4A017] bg-amber-50 text-zinc-950'
+                    : highContrastMode
+                      ? 'border-zinc-700 bg-zinc-900 text-white'
+                      : 'border-zinc-300 bg-white text-zinc-950'
+                }`}
+              >
+                <span className="block font-mono text-[11px] font-black text-amber-800">{order.id}</span>
+                <span className="mt-1 block text-sm font-extrabold">{order.service}</span>
+                <span className="mt-1 block text-xs text-zinc-500">{order.status}</span>
+              </button>
+            ))}
+            {generalThread && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedMessageOrderId('general');
+                  setReplyInput('');
+                  onSelectThread(generalThread.id);
+                }}
+                className={`w-full rounded-xl border p-3 text-left ${
+                  isGeneralConversationSelected
+                    ? 'border-[#D4A017] bg-amber-50 text-zinc-950'
+                    : highContrastMode
+                      ? 'border-zinc-700 bg-zinc-900 text-white'
+                      : 'border-zinc-300 bg-white text-zinc-950'
+                }`}
+              >
+                <span className="block text-sm font-extrabold">General conversation</span>
+                <span className="mt-1 block text-xs text-zinc-500">Not linked to an order</span>
+              </button>
+            )}
+            {activeCustomer && customerOrders.length === 0 && !generalThread && (
+              <p className="rounded-xl border border-dashed border-zinc-300 p-3 text-xs text-zinc-500">
+                No orders yet. You can start a general conversation.
+              </p>
+            )}
+          </div>
 
-                  <h3 className="font-extrabold text-sm mt-1">
-                    {activeThread
-                      ? `${activeThread.customerName} — ${activeThread.serviceName}`
-                      : 'Start a conversation with a customer'}
-                  </h3>
+          <div
+            className={`lg:col-span-5 flex h-[460px] flex-col justify-between rounded-2xl border p-4 shadow-xs ${
+              highContrastMode
+                ? 'border-zinc-700 bg-zinc-900 text-white'
+                : 'border-zinc-300 bg-white text-zinc-950'
+            }`}
+          >
+            {activeCustomer ? (
+              <>
+                <div className="flex items-center justify-between gap-2 border-b border-zinc-200 pb-2.5">
+                  <div className="min-w-0">
+                    <h3 className="truncate font-extrabold text-base">
+                      {activeCustomerName}
+                    </h3>
+                    <p className="truncate text-xs text-zinc-500">
+                      {activeOrder ? `${activeOrder.id} · ${activeOrder.service}` : 'General conversation'}
+                    </p>
+                  </div>
+                  <span className={`shrink-0 text-xs font-bold ${activeThread ? 'text-emerald-700' : 'text-amber-800'}`}>
+                    {activeThread ? 'Conversation' : 'New conversation'}
+                  </span>
                 </div>
 
-                <span className={`text-xs font-bold ${
-                  highContrastMode ? 'text-emerald-300' : 'text-emerald-700'
-                }`}>
-                  ● Direct Thread
-                </span>
-              </div>
-
-              <div className="space-y-2.5 overflow-y-auto py-3 pr-1 flex-1">
-                {isComposingNewConversation && (
-                  <label className="block text-xs font-bold">
-                    Select customer
-                    <select
-                      value={newConversationCustomerId}
-                      onChange={(event) => setNewConversationCustomerId(event.target.value)}
-                      className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm"
-                    >
-                      <option value="">Choose a customer…</option>
-                      {customers.map((customer) => (
-                        customer.totalRequests === 0 && (
-                        <option key={customer.id} value={customer.id}>
-                          {customer.firstName} {customer.lastName} (@{customer.username})
-                        </option>
-                        )
-                      ))}
-                    </select>
-                  </label>
-                )}
-                {activeThread?.messages.map((m) => (
-                  <div
-                    key={m.id}
-                    className={`flex flex-col max-w-[85%] ${
-                      m.isStaff ? 'ml-auto items-end' : 'mr-auto items-start'
-                    }`}
-                  >
-                    <span className={`text-[10px] font-semibold mb-0.5 ${
-                      highContrastMode ? 'text-zinc-300' : 'text-zinc-600'
-                    }`}>
-                      {m.sender} · {m.time}
-                    </span>
-
+                <div className="flex-1 space-y-2.5 overflow-y-auto py-3 pr-1">
+                  {activeThread?.messages.map((message) => (
                     <div
-                      className={`p-2.5 rounded-xl text-xs sm:text-sm leading-relaxed ${
-                        m.isStaff
-                          ? 'bg-[#D4A017] text-black font-bold border border-[#B8860B]'
-                          : 'bg-zinc-800 text-white border border-zinc-600'
+                      key={message.id}
+                      className={`flex max-w-[85%] flex-col ${
+                        message.isStaff ? 'ml-auto items-end' : 'mr-auto items-start'
                       }`}
                     >
-                      {m.text}
+                      <span className={`mb-0.5 text-[10px] font-semibold ${highContrastMode ? 'text-zinc-300' : 'text-zinc-600'}`}>
+                        {message.sender} · {message.time}
+                      </span>
+                      <div className={`rounded-xl p-2.5 text-xs leading-relaxed sm:text-sm ${
+                        message.isStaff
+                          ? 'border border-[#B8860B] bg-[#D4A017] font-bold text-black'
+                          : 'border border-zinc-600 bg-zinc-800 text-white'
+                      }`}>
+                        {message.text}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="space-y-2 pt-2 border-t border-zinc-200">
-                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
-                  {activeThread && [
-                    'GCash payment verified! Moving to printing now.',
-                    'Your order is Ready for Pickup at Malvar St., Victory Norte.',
-                    'Yes! Updated quote has been applied to your request.',
-                  ].map((quick, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={() => onSendAdminReply(activeThread.id, quick)}
-                      className="px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-300 text-[11px] font-bold whitespace-nowrap shrink-0 cursor-pointer"
-                    >
-                      + "{quick}"
-                    </button>
                   ))}
+                  {!activeThread?.messages.length && (
+                    <p className="rounded-xl border border-dashed border-zinc-300 p-4 text-center text-sm text-zinc-500">
+                      No messages yet. Send the first message to start this conversation.
+                    </p>
+                  )}
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex gap-2 border-t border-zinc-200 pt-2">
                   <input
                     type="text"
-                    placeholder={activeThread
-                      ? `Reply to ${activeThread.customerName} as NETSO Admin...`
-                      : 'Write a message to the selected customer...'}
+                    placeholder={`Message ${activeCustomerName}...`}
                     value={replyInput}
-                    onChange={(e) => setReplyInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                    disabled={isComposingNewConversation && !newConversationCustomerId}
-                    className={`flex-1 border rounded-xl px-3.5 py-2 font-semibold text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#D4A017] ${
+                    onChange={(event) => setReplyInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') void handleSend();
+                    }}
+                    disabled={isSendingMessage}
+                    className={`min-w-0 flex-1 rounded-xl border px-3.5 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#D4A017] sm:text-sm ${
                       highContrastMode
-                        ? 'bg-black border-zinc-700 text-white placeholder-zinc-400'
-                        : 'bg-zinc-100 border-zinc-300 text-zinc-950 placeholder-zinc-500'
+                        ? 'border-zinc-700 bg-black text-white placeholder-zinc-400'
+                        : 'border-zinc-300 bg-zinc-100 text-zinc-950 placeholder-zinc-500'
                     }`}
                   />
-
                   <button
                     type="button"
-                    onClick={handleSend}
-                    disabled={isComposingNewConversation && !newConversationCustomerId}
-                    className="px-4 py-2 bg-[#D4A017] hover:bg-[#B8860B] text-black font-extrabold uppercase rounded-xl border border-black flex items-center gap-1.5 text-xs sm:text-sm shrink-0 cursor-pointer"
+                    onClick={() => void handleSend()}
+                    disabled={isSendingMessage || !replyInput.trim()}
+                    className="flex shrink-0 items-center gap-1.5 rounded-xl border border-black bg-[#D4A017] px-3 py-2 text-xs font-extrabold uppercase text-black disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm"
                   >
-                    <Send className="w-4 h-4" />
-                    <span>Send</span>
+                    <Send className="h-4 w-4" />
+                    <span>{isSendingMessage ? 'Sending...' : activeThread ? 'Send' : 'Start chat'}</span>
                   </button>
                 </div>
-              </div>
-            </div>
-          )}
+              </>
+            ) : (
+              <p className="m-auto text-sm text-zinc-500">Select a customer to see their conversations.</p>
+            )}
+          </div>
         </div>
       </div>
     );
