@@ -115,7 +115,7 @@ export interface MessageThread {
   customerName: string;
   customerUsername: string;
   serviceName: string;
-  status: 'UNREAD' | 'Replied' | 'Closed';
+  status: 'UNREAD' | 'Read' | 'Replied' | 'Closed';
   lastUpdated: string;
   messages: ChatMessage[];
 }

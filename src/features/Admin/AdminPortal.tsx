@@ -80,6 +80,7 @@ interface AdminPortalProps {
   onReviewPayment: (paymentId: string, status: 'verified' | 'flagged') => void;
   onRecordPayment: (orderId: string, amount: number) => void;
   onSendAdminReply: (threadId: string, text: string) => void;
+  onMarkThreadRead: (threadId: string) => Promise<void>;
   onStartCustomerConversation: (
     customerId: string,
     text: string,
@@ -119,6 +120,7 @@ export function AdminPortal({
   onReviewPayment,
   onRecordPayment,
   onSendAdminReply,
+  onMarkThreadRead,
   onStartCustomerConversation,
   financialReportRevision,
   onCreateWalkInOrder,
@@ -560,6 +562,7 @@ export function AdminPortal({
               selectedThreadId={activeThreadId}
               onSelectThread={setSelectedThreadId}
               onSendAdminReply={onSendAdminReply}
+              onMarkThreadRead={onMarkThreadRead}
               onStartCustomerConversation={onStartCustomerConversation}
               highContrastMode={highContrastMode}
               fontSizeLevel={fontSizeLevel}

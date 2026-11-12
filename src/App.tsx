@@ -354,6 +354,26 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
     }
   };
 
+  const handleMarkThreadRead = async (threadId: string) => {
+    try {
+      const result = await apiRequest<{
+        threadId: string;
+        status: MessageThread['status'];
+      }>('/api/messages', {
+        method: 'PATCH',
+        body: JSON.stringify({ threadId }),
+      });
+      setThreads((current) =>
+        current.map((thread) =>
+          thread.id === result.threadId ? { ...thread, status: result.status } : thread,
+        ),
+      );
+    } catch (error) {
+      console.error('Unable to mark conversation as read:', error);
+      window.alert(error instanceof Error ? error.message : 'Unable to update conversation status.');
+    }
+  };
+
   const handleStartCustomerConversation = async (
     customerId: string,
     text: string,
@@ -499,6 +519,7 @@ export default function App({ customerTab, adminTab }: AppProps = {}) {
         onReviewPayment={handleReviewPayment}
         onRecordPayment={handleRecordPayment}
         onSendAdminReply={handleSendAdminReply}
+        onMarkThreadRead={handleMarkThreadRead}
         onStartCustomerConversation={handleStartCustomerConversation}
         financialReportRevision={financialReportRevision}
         onCreateWalkInOrder={handleCreateWalkInOrder}

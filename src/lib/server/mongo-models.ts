@@ -18,7 +18,7 @@ const threadSchema = new Schema(
     customerId: { type: String, required: true, index: true },
     customerName: { type: String, default: null, maxlength: 150 },
     customerUsername: { type: String, default: '', maxlength: 50 },
-    status: { type: String, enum: ['UNREAD', 'Replied', 'Closed'], default: 'UNREAD' },
+    status: { type: String, enum: ['UNREAD', 'Read', 'Replied', 'Closed'], default: 'UNREAD' },
     messages: { type: [messageSchema], default: [] },
   },
   { timestamps: true, versionKey: false, collection: 'message_threads' },
