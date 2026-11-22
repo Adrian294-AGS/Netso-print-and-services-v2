@@ -1,0 +1,40 @@
+name: NETSO signup test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-signup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Playwright on GitHub
+        run: |
+          npm init -y
+          npm install --save-dev @playwright/test
+          npx playwright install --with-deps chromium
+
+      - name: Run the NETSO signup test
+        run: |
+          cat > netso-signup.spec.js <<'EOF'
+          const { test, expect } = require('@playwright/test');
+
+          test('Create Account opens the NETSO signup form', async ({ page }) => {
+            await page.goto('https://netso-print-and-services-production.up.railway.app/');
+
+            await page.getByRole('button', {
+              name: 'Create Account',
+              exact: true,
+            }).click();
+
+            await expect(page.getByRole('button', {
+              name: 'Create Customer Account',
+              exact: true,
+            })).toBeVisible();
+          });
+          EOF
+          npx playwright test netso-signup.spec.js
