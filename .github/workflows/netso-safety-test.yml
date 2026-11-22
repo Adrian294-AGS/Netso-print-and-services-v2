@@ -1,0 +1,99 @@
+name: NETSO safety test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  artwork-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Playwright
+        run: |
+          npm init -y
+          npm install --save-dev @playwright/test
+          npx playwright install --with-deps chromium
+
+      - name: Test how NETSO handles unavailable artwork
+        env:
+          ORDER_URL: ${{ vars.NETSO_TEST_ORDER_URL }}
+          ARTWORK_CONTROL: ${{ vars.NETSO_ARTWORK_CONTROL }}
+          ARTWORK_PATH: ${{ vars.NETSO_ARTWORK_PATH }}
+          EXPECTED_WARNING: ${{ vars.NETSO_ARTWORK_WARNING }}
+          STAFF_STATE: ${{ secrets.NETSO_STAFF_STORAGE_STATE }}
+        run: |
+          cat > netso-safety.spec.cjs <<'EOF'
+          const { test, expect } = require('@playwright/test');
+
+          function requiredSetting(name) {
+            const value = process.env[name]?.trim();
+            if (!value) throw new Error(`Missing GitHub setting: ${name}`);
+            return value;
+          }
+
+          const orderUrl = requiredSetting('ORDER_URL');
+          const artworkControl = requiredSetting('ARTWORK_CONTROL');
+          const artworkPath = requiredSetting('ARTWORK_PATH');
+          const expectedWarning = requiredSetting('EXPECTED_WARNING');
+
+          test.use({
+            storageState: JSON.parse(requiredSetting('STAFF_STATE')),
+            serviceWorkers: 'block',
+          });
+
+          const isArtwork = (url) => url.pathname === artworkPath;
+
+          async function openArtwork(page, context) {
+            const control = page
+              .getByRole('link', { name: artworkControl, exact: true })
+              .or(page.getByRole('button', {
+                name: artworkControl,
+                exact: true,
+              }));
+
+            await expect(control).toBeVisible();
+
+            const [response] = await Promise.all([
+              context.waitForEvent('response', {
+                predicate: (response) => isArtwork(new URL(response.url())),
+                timeout: 15_000,
+              }),
+              control.click(),
+            ]);
+
+            return response.status();
+          }
+
+          test('The sample artwork loads normally', async ({ page, context }) => {
+            await page.goto(orderUrl);
+            const status = await openArtwork(page, context);
+            expect(status, 'The sample file should return a successful response')
+              .toBeGreaterThanOrEqual(200);
+            expect(status).toBeLessThan(300);
+          });
+
+          test('NETSO warns staff when artwork is unavailable', async ({ page, context }) => {
+            await page.goto(orderUrl);
+
+            await context.route(isArtwork, (route) => route.fulfill({
+              status: 404,
+              contentType: 'text/plain',
+              body: 'File not found',
+            }));
+
+            expect(await openArtwork(page, context)).toBe(404);
+
+            await expect(
+              page.getByText(expectedWarning, { exact: true }),
+              'The NETSO staff page should show the expected artwork warning',
+            ).toBeVisible();
+          });
+          EOF
+
+          npx playwright test netso-safety.spec.cjs --workers=1
